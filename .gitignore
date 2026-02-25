@@ -1,0 +1,82 @@
+# =============================================================================
+# .gitignore Template
+# =============================================================================
+
+# Build outputs
+bin/
+obj/
+out/
+build/
+dist/
+publish/
+
+# IDE
+.idea/
+.vs/
+.vscode/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Test results
+TestResults/
+coverage/
+*.trx
+
+# Dependencies (Node.js)
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Secrets
+secrets.json
+credentials.json
+*.pem
+*.key
+*.pfx
+*.p12
+
+# SSH Keys
+id_rsa
+id_rsa.*
+id_dsa
+id_ecdsa
+id_ed25519
+*.pub
+
+# Cloud credentials
+.aws/
+.gcp/
+.azure/
+gcloud-credentials.json
+service-account*.json
+
+# Temporary
+*.tmp
+*.temp
+tmp/
+temp/
+.cache/
+
+# Project folders (gitignored content, keep .gitkeep)
+temporary/*
+!temporary/.gitkeep
+secrets/*
+!secrets/.gitkeep
+
+# Package managers
+packages/
+*.nupkg
