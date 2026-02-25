@@ -80,3 +80,18 @@ secrets/*
 # Package managers
 packages/
 *.nupkg
+
+# SQLite databases
+*.db
+*.db-shm
+*.db-wal
+
+# .NET specific
+*.DotSettings.user
+project.lock.json
+*.nuget.props
+*.nuget.targets
+CoverageReport/
+
+# Swagger generated
+swagger.json
