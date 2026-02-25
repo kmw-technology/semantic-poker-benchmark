@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.SignalR;
+using SemanticPoker.Api.Hubs;
 using SemanticPoker.Api.Infrastructure.Persistence;
 using SemanticPoker.Shared.Enums;
 using SemanticPoker.Shared.Interfaces;
@@ -16,6 +18,7 @@ public class MatchRunnerService
     private readonly LlmResponseParser _responseParser;
     private readonly AdaptiveHistoryBuilder _historyBuilder;
     private readonly ArchitectRotation _architectRotation;
+    private readonly IHubContext<MatchProgressHub> _hubContext;
     private readonly ILogger<MatchRunnerService> _logger;
 
     public MatchRunnerService(
@@ -28,6 +31,7 @@ public class MatchRunnerService
         LlmResponseParser responseParser,
         AdaptiveHistoryBuilder historyBuilder,
         ArchitectRotation architectRotation,
+        IHubContext<MatchProgressHub> hubContext,
         ILogger<MatchRunnerService> logger)
     {
         _repository = repository;
@@ -39,6 +43,7 @@ public class MatchRunnerService
         _responseParser = responseParser;
         _historyBuilder = historyBuilder;
         _architectRotation = architectRotation;
+        _hubContext = hubContext;
         _logger = logger;
     }
 
@@ -103,11 +108,28 @@ public class MatchRunnerService
                 }
 
                 await _repository.UpdateAsync(match, ct);
+
+                await _hubContext.Clients.Group(matchId.ToString()).SendAsync("RoundCompleted", new
+                {
+                    MatchId = matchId,
+                    RoundNumber = roundNum,
+                    CompletedRounds = match.Rounds.Count(r => r.Phase == RoundPhase.Completed),
+                    TotalRounds = match.Config.TotalRounds,
+                    Scores = match.Scores,
+                    Status = match.Status.ToString()
+                }, ct);
             }
 
             match.Status = MatchStatus.Completed;
             match.CompletedAt = DateTime.UtcNow;
             await _repository.UpdateAsync(match, ct);
+
+            await _hubContext.Clients.Group(matchId.ToString()).SendAsync("MatchCompleted", new
+            {
+                MatchId = matchId,
+                Scores = match.Scores,
+                Status = match.Status.ToString()
+            }, ct);
 
             _logger.LogInformation("Match {MatchId} completed. Scores: {Scores}", matchId,
                 string.Join(", ", match.Scores.Select(kv => $"{kv.Key}: {kv.Value}")));

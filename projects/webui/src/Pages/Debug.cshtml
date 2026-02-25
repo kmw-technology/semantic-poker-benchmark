@@ -1,0 +1,161 @@
+@page
+@model SemanticPoker.WebUI.Pages.DebugModel
+@{
+    ViewData["Title"] = "Debug";
+}
+
+<h1><i class="bi bi-bug"></i> Debug Tools</h1>
+<p class="text-muted">Test game engine components and LLM prompts directly.</p>
+
+@if (Model.ErrorMessage != null)
+{
+    <div class="alert alert-danger alert-dismissible fade show">
+        @Model.ErrorMessage
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+}
+
+<div class="row">
+    <!-- State Generation -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-dice-5"></i> Generate Game State</h5></div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="GenerateState">
+                    <div class="mb-3">
+                        <label for="stateSeed" class="form-label">Seed (optional)</label>
+                        <input type="number" class="form-control" name="StateSeed" id="stateSeed"
+                               value="@Model.StateSeed" placeholder="Random if empty">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-play"></i> Generate
+                    </button>
+                </form>
+
+                @if (Model.GeneratedState != null)
+                {
+                    <hr />
+                    <p><strong>Seed:</strong> @Model.GeneratedState.Seed</p>
+                    <div class="d-flex gap-2 mb-2">
+                        @foreach (var door in Model.GeneratedState.Doors)
+                        {
+                            var css = door.Type == "Treasure" ? "door-treasure" :
+                                     door.Type == "Trap" ? "door-trap" : "door-empty";
+                            <div class="door-card @css">
+                                <div class="fs-5">@door.Label</div>
+                                <small>@door.Type</small>
+                            </div>
+                        }
+                    </div>
+                    <p class="small text-muted">Treasure: Door @Model.GeneratedState.TreasureDoor | Trap: Door @Model.GeneratedState.TrapDoor</p>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Sentence Generation -->
+    <div class="col-md-6 mb-4">
+        <div class="card">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-chat-quote"></i> Generate Engine Sentences</h5></div>
+            <div class="card-body">
+                <form method="post" asp-page-handler="GenerateSentences">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label for="sentenceSeed" class="form-label">Seed (optional)</label>
+                            <input type="number" class="form-control" name="SentenceSeed" id="sentenceSeed"
+                                   value="@Model.SentenceSeed" placeholder="Random if empty">
+                        </div>
+                        <div class="col-6">
+                            <label for="sentenceCount" class="form-label">Count</label>
+                            <input type="number" class="form-control" name="SentenceCount" id="sentenceCount"
+                                   value="@Model.SentenceCount" min="1" max="5">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-play"></i> Generate
+                    </button>
+                </form>
+
+                @if (Model.GeneratedSentences != null)
+                {
+                    <hr />
+                    <div class="d-flex gap-2 mb-3">
+                        @foreach (var door in Model.GeneratedSentences.State.Doors)
+                        {
+                            var css = door.Type == "Treasure" ? "door-treasure" :
+                                     door.Type == "Trap" ? "door-trap" : "door-empty";
+                            <div class="door-card @css" style="width:60px; height:70px;">
+                                <div>@door.Label</div>
+                                <small style="font-size:0.6rem;">@door.Type</small>
+                            </div>
+                        }
+                    </div>
+                    @foreach (var s in Model.GeneratedSentences.Sentences)
+                    {
+                        <div class="mb-2 sentence-engine">
+                            <strong>@(s.Index + 1).</strong> @s.Text
+                            <span class="badge bg-success status-badge">Engine</span>
+                            <span class="badge bg-info status-badge">True</span>
+                        </div>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Prompt Testing -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0"><i class="bi bi-terminal"></i> Test LLM Prompt</h5></div>
+    <div class="card-body">
+        <form method="post" asp-page-handler="TestPrompt">
+            <div class="row mb-3">
+                <div class="col-md-4">
+                    <label for="promptModel" class="form-label">Model</label>
+                    <select class="form-select" name="PromptModelId" id="promptModel">
+                        @foreach (var m in Model.AvailableModels)
+                        {
+                            <option value="@m.ModelId" selected="@(m.ModelId == Model.PromptModelId)">@m.DisplayName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label for="promptTemp" class="form-label">Temperature</label>
+                    <input type="number" class="form-control" name="PromptTemperature" id="promptTemp"
+                           value="@Model.PromptTemperature" step="0.1" min="0" max="2">
+                </div>
+                <div class="col-md-4">
+                    <label for="promptTokens" class="form-label">Max Tokens</label>
+                    <input type="number" class="form-control" name="PromptMaxTokens" id="promptTokens"
+                           value="@Model.PromptMaxTokens" min="1" max="4096">
+                </div>
+            </div>
+            <div class="mb-3">
+                <label for="sysPrompt" class="form-label">System Prompt</label>
+                <textarea class="form-control" name="SystemPrompt" id="sysPrompt" rows="2">@Model.SystemPrompt</textarea>
+            </div>
+            <div class="mb-3">
+                <label for="usrPrompt" class="form-label">User Prompt</label>
+                <textarea class="form-control" name="UserPrompt" id="usrPrompt" rows="3" placeholder="Enter your prompt...">@Model.UserPrompt</textarea>
+            </div>
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-send"></i> Send Prompt
+            </button>
+        </form>
+
+        @if (Model.PromptResult != null)
+        {
+            <hr />
+            <div class="d-flex gap-3 mb-2 text-muted small">
+                <span><i class="bi bi-clock"></i> @Model.PromptResult.ResponseTimeMs.ToString("F0")ms</span>
+                <span><i class="bi bi-arrow-up"></i> @Model.PromptResult.PromptTokens prompt tokens</span>
+                <span><i class="bi bi-arrow-down"></i> @Model.PromptResult.CompletionTokens completion tokens</span>
+            </div>
+            <div class="card bg-dark text-light">
+                <div class="card-body">
+                    <pre class="mb-0" style="white-space: pre-wrap;">@Model.PromptResult.Response</pre>
+                </div>
+            </div>
+        }
+    </div>
+</div>

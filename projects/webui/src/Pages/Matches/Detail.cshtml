@@ -155,10 +155,37 @@
     </div>
 }
 
-@if (Model.Match.Status is MatchStatus.Running or MatchStatus.Pending)
-{
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
     <script>
-        setTimeout(() => location.reload(), 5000);
+        const matchId = '@Model.Match.Id';
+        const apiBaseUrl = '@(ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["BenchmarkApi:BaseUrl"] ?? "http://localhost:5000")';
+
+        const connection = new signalR.HubConnectionBuilder()
+            .withUrl(apiBaseUrl + '/hubs/match-progress')
+            .withAutomaticReconnect()
+            .build();
+
+        connection.on('RoundCompleted', (data) => {
+            console.log('Round completed:', data);
+            location.reload();
+        });
+
+        connection.on('MatchCompleted', (data) => {
+            console.log('Match completed:', data);
+            location.reload();
+        });
+
+        connection.start()
+            .then(() => {
+                console.log('SignalR connected');
+                return connection.invoke('JoinMatchGroup', matchId);
+            })
+            .then(() => console.log('Joined match group:', matchId))
+            .catch(err => {
+                console.warn('SignalR failed, falling back to polling:', err);
+                setInterval(() => location.reload(), 5000);
+            });
     </script>
 }
 

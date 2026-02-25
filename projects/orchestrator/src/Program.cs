@@ -58,14 +58,18 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// SignalR
+builder.Services.AddSignalR();
+
 // CORS
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.SetIsOriginAllowed(_ => true)
               .AllowAnyMethod()
-              .AllowAnyHeader();
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
@@ -101,6 +105,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors();
 app.MapControllers();
+app.MapHub<SemanticPoker.Api.Hubs.MatchProgressHub>("/hubs/match-progress");
 
 Log.Information("Semantic Poker Benchmark API starting on {Urls}", string.Join(", ", app.Urls));
 app.Run();
