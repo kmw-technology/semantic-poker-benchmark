@@ -70,48 +70,96 @@ This creates an **infinite skill ceiling** — there is no maximum level of play
 ```
 semantic-poker-benchmark/
 ├── projects/
-│   ├── game-engine/          # Core: State generation, sentence engine, scoring
-│   ├── orchestrator/         # LLM integration, match runner, result aggregation
-│   └── shared/               # DTOs, interfaces, enums
-├── tests/                    # E2E and integration tests
-├── documentation/            # Specs, diagrams
-├── artifacts/                # Benchmark reports
-└── resources/                # Prompt templates, seed data
+│   ├── shared/src/            # Enums, Models, Interfaces, DTOs
+│   ├── game-engine/src/       # State generation, 13 sentence templates, scoring
+│   ├── orchestrator/src/      # Backend REST API (port 5000)
+│   └── webui/src/             # Razor Pages Web UI (port 5010)
+├── tests/                     # E2E tests
+├── deployment/                # Docker Compose, Dockerfiles
+├── scripts/                   # Ollama init script
+└── documentation/             # Specs, diagrams
 ```
 
 ### Tech Stack
-- **Backend:** ASP.NET Core 8 (C#)
-- **API:** REST endpoints
-- **Database:** SQLite (local benchmark results)
-- **LLM Integration:** Provider-agnostic adapters (OpenAI, Anthropic, Google)
+- **Backend API:** ASP.NET Core 8, REST, Swagger/OpenAPI
+- **Web UI:** ASP.NET Core 8 Razor Pages, Bootstrap 5, Chart.js, SignalR
+- **Database:** SQLite via EF Core
+- **LLM Server:** Ollama (Docker, GPU-accelerated)
+- **Models:** Phi-3.5, DeepSeek-R1:1.5B, Llama-3.2:3B
 - **CI/CD:** GitHub Actions
 
 ## Getting Started
+
+### Option 1: Docker (Recommended)
 
 ```bash
 # Clone
 git clone https://github.com/kmw-technology/semantic-poker-benchmark.git
 cd semantic-poker-benchmark
 
-# Build
+# Copy environment config
+cp deployment/.env.example deployment/.env
+
+# Start all services (Ollama + API + WebUI)
+docker compose -f deployment/docker-compose.yml up -d
+
+# Web UI: http://localhost:5010
+# API Swagger: http://localhost:5000/swagger
+# Ollama: http://localhost:11434
+```
+
+### Option 2: Local Development
+
+```bash
+# Clone and build
+git clone https://github.com/kmw-technology/semantic-poker-benchmark.git
+cd semantic-poker-benchmark
 dotnet build
 
-# Run tests
+# Run tests (185 game engine tests)
 dotnet test
 
-# Run a benchmark match (TODO)
-dotnet run --project projects/orchestrator/src/ -- --models gpt-4,claude-3.5,gemini-1.5
+# Start Ollama separately, then:
+# Terminal 1 — Backend API
+dotnet run --project projects/orchestrator/src/
+
+# Terminal 2 — Web UI
+dotnet run --project projects/webui/src/
 ```
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/matches` | GET | List all matches |
+| `/api/matches` | POST | Start a new match |
+| `/api/matches/{id}` | GET | Get match status |
+| `/api/matches/{id}/rounds` | GET | List round summaries |
+| `/api/matches/{id}/rounds/{num}` | GET | Full round detail |
+| `/api/matches/{id}/pause` | POST | Pause match |
+| `/api/matches/{id}/resume` | POST | Resume match |
+| `/api/matches/{id}/cancel` | POST | Cancel match |
+| `/api/models` | GET | List available LLMs |
+| `/api/leaderboard` | GET | Aggregated statistics |
+| `/api/health` | GET | System health check |
+| `/api/debug/generate-state` | POST | Generate game state |
+| `/api/debug/generate-sentences` | POST | Generate engine sentences |
+| `/api/debug/test-prompt` | POST | Test raw LLM prompt |
 
 ## Roadmap
 
-- [ ] Core Game Engine (State generator, Sentence engine, Scoring)
-- [ ] LLM Provider Adapters (OpenAI, Anthropic, Google)
-- [ ] Match Orchestrator (Round management, result aggregation)
-- [ ] CLI Runner (Run benchmarks from command line)
-- [ ] Result Storage (SQLite, export to JSON/CSV)
-- [ ] Leaderboard API (Compare model performance)
-- [ ] Web Dashboard (Razor Pages UI for results visualization)
+- [x] Core Game Engine (State generator, 13 sentence templates, scoring)
+- [x] Ollama LLM Adapter with retry logic
+- [x] Match Orchestrator (Background execution, pause/resume/cancel)
+- [x] Backend REST API (14 endpoints, Swagger)
+- [x] EF Core + SQLite persistence
+- [x] Web UI — Dashboard, Match management, Round detail
+- [x] Leaderboard and Analysis pages with Chart.js
+- [x] Debug tools page
+- [x] SignalR real-time match progress
+- [x] Docker infrastructure (Ollama GPU + API + WebUI)
+- [ ] Extended integration tests
+- [ ] CI/CD pipeline hardening
 
 ## Key Design Principles
 
