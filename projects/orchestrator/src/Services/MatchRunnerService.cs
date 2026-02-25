@@ -1,0 +1,271 @@
+using SemanticPoker.Api.Infrastructure.Persistence;
+using SemanticPoker.Shared.Enums;
+using SemanticPoker.Shared.Interfaces;
+using SemanticPoker.Shared.Models;
+
+namespace SemanticPoker.Api.Services;
+
+public class MatchRunnerService
+{
+    private readonly IMatchRepository _repository;
+    private readonly IStateGenerator _stateGenerator;
+    private readonly ISentenceEngine _sentenceEngine;
+    private readonly IScoreCalculator _scoreCalculator;
+    private readonly ILlmAdapter _llmAdapter;
+    private readonly PromptBuilder _promptBuilder;
+    private readonly LlmResponseParser _responseParser;
+    private readonly AdaptiveHistoryBuilder _historyBuilder;
+    private readonly ArchitectRotation _architectRotation;
+    private readonly ILogger<MatchRunnerService> _logger;
+
+    public MatchRunnerService(
+        IMatchRepository repository,
+        IStateGenerator stateGenerator,
+        ISentenceEngine sentenceEngine,
+        IScoreCalculator scoreCalculator,
+        ILlmAdapter llmAdapter,
+        PromptBuilder promptBuilder,
+        LlmResponseParser responseParser,
+        AdaptiveHistoryBuilder historyBuilder,
+        ArchitectRotation architectRotation,
+        ILogger<MatchRunnerService> logger)
+    {
+        _repository = repository;
+        _stateGenerator = stateGenerator;
+        _sentenceEngine = sentenceEngine;
+        _scoreCalculator = scoreCalculator;
+        _llmAdapter = llmAdapter;
+        _promptBuilder = promptBuilder;
+        _responseParser = responseParser;
+        _historyBuilder = historyBuilder;
+        _architectRotation = architectRotation;
+        _logger = logger;
+    }
+
+    public async Task RunMatchAsync(Guid matchId, CancellationToken ct = default)
+    {
+        var match = await _repository.GetByIdAsync(matchId, ct);
+        if (match is null)
+        {
+            _logger.LogError("Match {MatchId} not found", matchId);
+            return;
+        }
+
+        try
+        {
+            match.Status = MatchStatus.Running;
+            match.StartedAt = DateTime.UtcNow;
+
+            // Initialize scores
+            foreach (var modelId in match.Config.ModelIds)
+            {
+                if (!match.Scores.ContainsKey(modelId))
+                    match.Scores[modelId] = 0;
+            }
+
+            await _repository.UpdateAsync(match, ct);
+
+            var startRound = match.Rounds.Count(r => r.Phase == RoundPhase.Completed) + 1;
+
+            for (int roundNum = startRound; roundNum <= match.Config.TotalRounds; roundNum++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                // Check for pause/cancel between rounds
+                var freshMatch = await _repository.GetByIdAsync(matchId, ct);
+                if (freshMatch?.Status == MatchStatus.Paused)
+                {
+                    _logger.LogInformation("Match {MatchId} paused at round {Round}", matchId, roundNum);
+                    return;
+                }
+                if (freshMatch?.Status == MatchStatus.Cancelled)
+                {
+                    _logger.LogInformation("Match {MatchId} cancelled at round {Round}", matchId, roundNum);
+                    return;
+                }
+
+                _logger.LogInformation("Starting round {Round}/{Total} for match {MatchId}",
+                    roundNum, match.Config.TotalRounds, matchId);
+
+                var round = await RunRoundAsync(match, roundNum, ct);
+                match.Rounds.Add(round);
+
+                // Update scores
+                if (round.Result != null)
+                {
+                    var architectId = round.ArchitectModelId;
+                    match.Scores[architectId] = match.Scores.GetValueOrDefault(architectId) + round.Result.ArchitectScoreChange;
+
+                    foreach (var (playerId, scoreChange) in round.Result.PlayerScoreChanges)
+                    {
+                        match.Scores[playerId] = match.Scores.GetValueOrDefault(playerId) + scoreChange;
+                    }
+                }
+
+                await _repository.UpdateAsync(match, ct);
+            }
+
+            match.Status = MatchStatus.Completed;
+            match.CompletedAt = DateTime.UtcNow;
+            await _repository.UpdateAsync(match, ct);
+
+            _logger.LogInformation("Match {MatchId} completed. Scores: {Scores}", matchId,
+                string.Join(", ", match.Scores.Select(kv => $"{kv.Key}: {kv.Value}")));
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Match {MatchId} was cancelled", matchId);
+            match.Status = MatchStatus.Cancelled;
+            await _repository.UpdateAsync(match, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Match {MatchId} failed with error", matchId);
+            match.Status = MatchStatus.Failed;
+            match.ErrorMessage = ex.Message;
+            await _repository.UpdateAsync(match, CancellationToken.None);
+        }
+    }
+
+    private async Task<Round> RunRoundAsync(Match match, int roundNumber, CancellationToken ct)
+    {
+        var round = new Round
+        {
+            RoundNumber = roundNumber,
+            Phase = RoundPhase.NotStarted,
+            StartedAt = DateTime.UtcNow
+        };
+
+        // Phase 1: Generate state
+        var seed = match.Config.RandomSeed.HasValue
+            ? match.Config.RandomSeed.Value + roundNumber
+            : (int?)null;
+        round.GameState = _stateGenerator.Generate(seed);
+        round.Phase = RoundPhase.StateGenerated;
+
+        _logger.LogDebug("Round {Round}: State generated - Treasure={Treasure}, Trap={Trap}",
+            roundNumber, round.GameState.TreasureDoor.Label, round.GameState.TrapDoor.Label);
+
+        // Phase 2: Engine sentences
+        round.EngineSentences = _sentenceEngine.GenerateTrueSentences(round.GameState, 2);
+        round.Phase = RoundPhase.EngineSentencesGenerated;
+
+        _logger.LogDebug("Round {Round}: Engine sentences: {Sentences}",
+            roundNumber, string.Join(" | ", round.EngineSentences.Select(s => s.Text)));
+
+        // Phase 3: Architect sentences
+        var architectModelId = match.Config.RotateArchitect
+            ? _architectRotation.GetArchitectModelId(roundNumber, match.Config.ModelIds)
+            : match.Config.ModelIds[0];
+        round.ArchitectModelId = architectModelId;
+
+        var history = match.Config.AdaptivePlay
+            ? _historyBuilder.BuildArchitectHistory(match.Rounds)
+            : null;
+
+        var architectSystemPrompt = _promptBuilder.BuildArchitectSystemPrompt();
+        var architectUserPrompt = _promptBuilder.BuildArchitectUserPrompt(
+            round.GameState, round.EngineSentences, history);
+
+        var llmOptions = new LlmRequestOptions
+        {
+            Temperature = match.Config.LlmTemperature,
+            MaxTokens = 1024,
+            TimeoutSeconds = match.Config.LlmTimeoutSeconds
+        };
+
+        var architectResponse = await _llmAdapter.SendPromptAsync(
+            architectModelId, architectSystemPrompt, architectUserPrompt, llmOptions, ct);
+
+        round.ArchitectSentences = _responseParser.ParseArchitectSentences(architectResponse.Content);
+
+        // Store architect decision for tracking
+        round.PlayerDecisions.Add(new PlayerDecision
+        {
+            ModelId = architectModelId,
+            Role = PlayerRole.Architect,
+            ChosenDoor = '\0',
+            RawResponse = architectResponse.Content,
+            PromptTokens = architectResponse.PromptTokens,
+            CompletionTokens = architectResponse.CompletionTokens,
+            ResponseTimeMs = architectResponse.ResponseTimeMs
+        });
+
+        round.Phase = RoundPhase.ArchitectSentencesGenerated;
+
+        _logger.LogDebug("Round {Round}: Architect {Model} wrote {Count} sentences",
+            roundNumber, architectModelId, round.ArchitectSentences.Count);
+
+        // Phase 4: Shuffle sentences
+        round.ShuffledSentences = _sentenceEngine.ShuffleSentences(
+            round.EngineSentences, round.ArchitectSentences, seed);
+        round.Phase = RoundPhase.SentencesShuffled;
+
+        // Phase 5: Player decisions
+        round.Phase = RoundPhase.PlayersDeciding;
+        var playerModelIds = match.Config.RotateArchitect
+            ? _architectRotation.GetPlayerModelIds(roundNumber, match.Config.ModelIds)
+            : match.Config.ModelIds.Where(m => m != architectModelId).ToList();
+
+        var playerSystemPrompt = _promptBuilder.BuildPlayerSystemPrompt();
+
+        foreach (var playerModelId in playerModelIds)
+        {
+            var playerHistory = match.Config.AdaptivePlay
+                ? _historyBuilder.BuildPlayerHistory(match.Rounds, playerModelId)
+                : null;
+
+            var playerUserPrompt = _promptBuilder.BuildPlayerUserPrompt(
+                round.ShuffledSentences, playerHistory);
+
+            var playerResponse = await _llmAdapter.SendPromptAsync(
+                playerModelId, playerSystemPrompt, playerUserPrompt, llmOptions, ct);
+
+            var (chosenDoor, reasoning) = _responseParser.ParsePlayerResponse(playerResponse.Content);
+
+            var doorType = round.GameState.Doors.FirstOrDefault(d => d.Label == chosenDoor)?.Type ?? DoorType.Empty;
+
+            round.PlayerDecisions.Add(new PlayerDecision
+            {
+                ModelId = playerModelId,
+                Role = PlayerRole.Player,
+                ChosenDoor = chosenDoor,
+                DoorOutcome = doorType,
+                RawResponse = playerResponse.Content,
+                Reasoning = reasoning,
+                PromptTokens = playerResponse.PromptTokens,
+                CompletionTokens = playerResponse.CompletionTokens,
+                ResponseTimeMs = playerResponse.ResponseTimeMs
+            });
+
+            _logger.LogDebug("Round {Round}: Player {Model} chose Door {Door} ({Outcome})",
+                roundNumber, playerModelId, chosenDoor, doorType);
+        }
+
+        // Phase 6: Scoring
+        round.Phase = RoundPhase.Scoring;
+        var playerDecisions = round.PlayerDecisions.Where(d => d.Role == PlayerRole.Player).ToList();
+        round.Result = _scoreCalculator.CalculateRound(round.GameState, playerDecisions, architectModelId);
+
+        // Update individual decision scores
+        foreach (var decision in round.PlayerDecisions.Where(d => d.Role == PlayerRole.Player))
+        {
+            if (round.Result.PlayerScoreChanges.TryGetValue(decision.ModelId, out var scoreChange))
+                decision.ScoreChange = scoreChange;
+        }
+
+        // Update architect decision score
+        var architectDecision = round.PlayerDecisions.FirstOrDefault(d => d.Role == PlayerRole.Architect);
+        if (architectDecision != null)
+            architectDecision.ScoreChange = round.Result.ArchitectScoreChange;
+
+        round.Phase = RoundPhase.Completed;
+        round.CompletedAt = DateTime.UtcNow;
+
+        _logger.LogInformation("Round {Round}: Completed. Architect score: {ArchitectScore}. Player scores: {PlayerScores}",
+            roundNumber, round.Result.ArchitectScoreChange,
+            string.Join(", ", round.Result.PlayerScoreChanges.Select(kv => $"{kv.Key}:{kv.Value}")));
+
+        return round;
+    }
+}
