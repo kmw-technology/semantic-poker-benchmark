@@ -1,0 +1,118 @@
+@page
+@model SemanticPoker.WebUI.Pages.AnalysisModel
+@{
+    ViewData["Title"] = "Analysis";
+}
+
+<h1><i class="bi bi-graph-up"></i> Analysis</h1>
+<p class="text-muted">Visual performance analysis across all benchmark matches.</p>
+
+@if (!Model.Entries.Any())
+{
+    <div class="alert alert-info">
+        No data available yet. Complete some benchmark matches to see analysis.
+    </div>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">Score Comparison</h5></div>
+                <div class="card-body">
+                    <canvas id="scoreChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">Win Rate vs Trap Rate</h5></div>
+                <div class="card-body">
+                    <canvas id="rateChart" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card">
+                <div class="card-header"><h5 class="mb-0">Model Comparison Radar</h5></div>
+                <div class="card-body">
+                    <canvas id="radarChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        const models = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => e.ModelId)));
+        const playerScores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => e.PlayerScore)));
+        const architectScores = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => e.ArchitectScore)));
+        const winRates = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => Math.Round(e.PlayerWinRate * 100, 1))));
+        const trapRates = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => Math.Round(e.ArchitectTrapRate * 100, 1))));
+        const treasuresFound = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => e.TreasuresFound)));
+        const trapsHit = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => e.TrapsHit)));
+        const playersTrapped = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => e.PlayersTrapped)));
+        const totalRoundsPlayed = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(Model.Entries.Select(e => e.TotalRoundsPlayed)));
+
+        if (models.length > 0) {
+            // Score comparison bar chart
+            new Chart(document.getElementById('scoreChart'), {
+                type: 'bar',
+                data: {
+                    labels: models,
+                    datasets: [
+                        { label: 'Player Score', data: playerScores, backgroundColor: 'rgba(25, 135, 84, 0.7)' },
+                        { label: 'Architect Score', data: architectScores, backgroundColor: 'rgba(220, 53, 69, 0.7)' }
+                    ]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'top' } } }
+            });
+
+            // Win rate vs trap rate
+            new Chart(document.getElementById('rateChart'), {
+                type: 'bar',
+                data: {
+                    labels: models,
+                    datasets: [
+                        { label: 'Player Win Rate %', data: winRates, backgroundColor: 'rgba(13, 110, 253, 0.7)' },
+                        { label: 'Architect Trap Rate %', data: trapRates, backgroundColor: 'rgba(255, 193, 7, 0.7)' }
+                    ]
+                },
+                options: { responsive: true, scales: { y: { max: 100 } } }
+            });
+
+            // Radar chart
+            const maxTreasures = Math.max(...treasuresFound, 1);
+            const maxTrapped = Math.max(...playersTrapped, 1);
+            const maxRounds = Math.max(...totalRoundsPlayed, 1);
+
+            const colors = ['rgba(13,110,253,0.5)', 'rgba(25,135,84,0.5)', 'rgba(220,53,69,0.5)', 'rgba(255,193,7,0.5)'];
+            const borderColors = ['rgba(13,110,253,1)', 'rgba(25,135,84,1)', 'rgba(220,53,69,1)', 'rgba(255,193,7,1)'];
+
+            new Chart(document.getElementById('radarChart'), {
+                type: 'radar',
+                data: {
+                    labels: ['Win Rate', 'Trap Rate', 'Treasures Found', 'Traps Avoided', 'Players Trapped'],
+                    datasets: models.map((m, i) => ({
+                        label: m,
+                        data: [
+                            winRates[i],
+                            trapRates[i],
+                            treasuresFound[i] / maxTreasures * 100,
+                            100 - trapsHit[i] / maxRounds * 100,
+                            playersTrapped[i] / maxTrapped * 100
+                        ],
+                        backgroundColor: colors[i % colors.length],
+                        borderColor: borderColors[i % borderColors.length]
+                    }))
+                },
+                options: { responsive: true, scales: { r: { max: 100, min: 0 } } }
+            });
+        }
+    </script>
+}

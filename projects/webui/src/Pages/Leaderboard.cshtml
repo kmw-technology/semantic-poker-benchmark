@@ -1,0 +1,100 @@
+@page
+@model SemanticPoker.WebUI.Pages.LeaderboardModel
+@{
+    ViewData["Title"] = "Leaderboard";
+}
+
+<h1><i class="bi bi-trophy"></i> Leaderboard</h1>
+<p class="text-muted">Aggregated performance statistics across all completed matches.</p>
+
+@if (!Model.Entries.Any())
+{
+    <div class="alert alert-info">
+        No completed matches yet. Run some benchmarks to see leaderboard data.
+    </div>
+}
+else
+{
+    <!-- Combined Score -->
+    <div class="card mb-4">
+        <div class="card-header"><h5 class="mb-0">Overall Rankings</h5></div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Model</th>
+                        <th class="text-center">Combined Score</th>
+                        <th class="text-center">Player Score</th>
+                        <th class="text-center">Architect Score</th>
+                        <th class="text-center">Matches</th>
+                        <th class="text-center">Rounds</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{ var rank = 1; }
+                    @foreach (var entry in Model.Entries)
+                    {
+                        <tr>
+                            <td>
+                                @if (rank == 1) { <span class="fs-5">&#129351;</span> }
+                                else if (rank == 2) { <span class="fs-5">&#129352;</span> }
+                                else if (rank == 3) { <span class="fs-5">&#129353;</span> }
+                                else { @rank }
+                            </td>
+                            <td><strong>@entry.ModelId</strong></td>
+                            <td class="text-center @(entry.CombinedScore > 0 ? "score-positive" : entry.CombinedScore < 0 ? "score-negative" : "")">
+                                @(entry.CombinedScore > 0 ? "+" : "")@entry.CombinedScore
+                            </td>
+                            <td class="text-center">@entry.PlayerScore</td>
+                            <td class="text-center">@entry.ArchitectScore</td>
+                            <td class="text-center">@entry.TotalMatches</td>
+                            <td class="text-center">@entry.TotalRoundsPlayed</td>
+                        </tr>
+                        rank++;
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Detailed Stats -->
+    <div class="card">
+        <div class="card-header"><h5 class="mb-0">Detailed Statistics</h5></div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Model</th>
+                            <th class="text-center">Treasures Found</th>
+                            <th class="text-center">Traps Hit</th>
+                            <th class="text-center">Empty Doors</th>
+                            <th class="text-center">Win Rate</th>
+                            <th class="text-center">Rounds as Architect</th>
+                            <th class="text-center">Players Trapped</th>
+                            <th class="text-center">Trap Rate</th>
+                            <th class="text-center">Avg Response</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in Model.Entries)
+                        {
+                            <tr>
+                                <td><strong>@entry.ModelId</strong></td>
+                                <td class="text-center score-positive">@entry.TreasuresFound</td>
+                                <td class="text-center score-negative">@entry.TrapsHit</td>
+                                <td class="text-center">@entry.EmptyDoors</td>
+                                <td class="text-center">@entry.PlayerWinRate.ToString("P1")</td>
+                                <td class="text-center">@entry.RoundsAsArchitect</td>
+                                <td class="text-center">@entry.PlayersTrapped</td>
+                                <td class="text-center">@entry.ArchitectTrapRate.ToString("P1")</td>
+                                <td class="text-center">@entry.AvgResponseTimeMs.ToString("F0")ms</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}

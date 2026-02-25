@@ -1,0 +1,176 @@
+@page "{id:guid}"
+@model SemanticPoker.WebUI.Pages.Matches.DetailModel
+@{
+    ViewData["Title"] = $"Match {Model.Match?.Id.ToString()[..8]}";
+}
+
+@if (Model.Match is null)
+{
+    <div class="alert alert-danger">Match not found.</div>
+    return;
+}
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1>
+            <i class="bi bi-controller"></i> Match
+            <code>@Model.Match.Id.ToString()[..8]</code>
+        </h1>
+        <span class="badge @GetStatusBadgeClass(Model.Match.Status) fs-6">@Model.Match.Status</span>
+    </div>
+    <div>
+        @if (Model.Match.Status == MatchStatus.Running)
+        {
+            <form method="post" asp-page-handler="Pause" asp-route-id="@Model.Match.Id" class="d-inline">
+                <button class="btn btn-warning"><i class="bi bi-pause-fill"></i> Pause</button>
+            </form>
+            <form method="post" asp-page-handler="Cancel" asp-route-id="@Model.Match.Id" class="d-inline">
+                <button class="btn btn-danger"><i class="bi bi-stop-fill"></i> Cancel</button>
+            </form>
+        }
+        @if (Model.Match.Status == MatchStatus.Paused)
+        {
+            <form method="post" asp-page-handler="Resume" asp-route-id="@Model.Match.Id" class="d-inline">
+                <button class="btn btn-success"><i class="bi bi-play-fill"></i> Resume</button>
+            </form>
+            <form method="post" asp-page-handler="Cancel" asp-route-id="@Model.Match.Id" class="d-inline">
+                <button class="btn btn-danger"><i class="bi bi-stop-fill"></i> Cancel</button>
+            </form>
+        }
+        @if (Model.Match.Status is MatchStatus.Running or MatchStatus.Pending)
+        {
+            <a href="" class="btn btn-outline-secondary" onclick="location.reload(); return false;">
+                <i class="bi bi-arrow-clockwise"></i> Refresh
+            </a>
+        }
+    </div>
+</div>
+
+<!-- Progress -->
+<div class="mb-4">
+    <div class="d-flex justify-content-between mb-1">
+        <span>Progress</span>
+        <span>@Model.Match.CompletedRounds / @Model.Match.TotalRounds rounds</span>
+    </div>
+    <div class="progress" style="height: 25px;">
+        @{ var pct = Model.Match.TotalRounds > 0 ? (int)(100.0 * Model.Match.CompletedRounds / Model.Match.TotalRounds) : 0; }
+        <div class="progress-bar @(pct == 100 ? "bg-success" : "bg-primary")" role="progressbar"
+             style="width: @pct%">@pct%</div>
+    </div>
+</div>
+
+<!-- Scoreboard -->
+<div class="card mb-4">
+    <div class="card-header"><h5 class="mb-0"><i class="bi bi-bar-chart"></i> Scoreboard</h5></div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Model</th>
+                    <th class="text-center">Score</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var kv in Model.Match.Scores.OrderByDescending(kv => kv.Value))
+                {
+                    <tr>
+                        <td>@kv.Key</td>
+                        <td class="text-center">
+                            <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
+                                @(kv.Value > 0 ? "+" : "")@kv.Value
+                            </span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Rounds -->
+<div class="card">
+    <div class="card-header"><h5 class="mb-0"><i class="bi bi-list-ol"></i> Rounds</h5></div>
+    <div class="card-body p-0">
+        @if (!Model.Rounds.Any())
+        {
+            <div class="p-4 text-center text-muted">
+                No rounds completed yet.
+            </div>
+        }
+        else
+        {
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Architect</th>
+                        <th>Player Choices</th>
+                        <th>Score Changes</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var round in Model.Rounds.OrderBy(r => r.RoundNumber))
+                    {
+                        <tr>
+                            <td>@round.RoundNumber</td>
+                            <td>@round.ArchitectModelId</td>
+                            <td>
+                                @foreach (var choice in round.PlayerChoices)
+                                {
+                                    <span class="me-2">@choice.Key: <strong>@choice.Value</strong></span>
+                                }
+                            </td>
+                            <td>
+                                @foreach (var sc in round.ScoreChanges)
+                                {
+                                    <span class="me-2 @(sc.Value > 0 ? "score-positive" : sc.Value < 0 ? "score-negative" : "score-neutral")">
+                                        @sc.Key: @(sc.Value > 0 ? "+" : "")@sc.Value
+                                    </span>
+                                }
+                            </td>
+                            <td>
+                                <span class="badge @(round.Phase == RoundPhase.Completed ? "bg-success" : "bg-info") status-badge">
+                                    @round.Phase
+                                </span>
+                            </td>
+                            <td>
+                                <a asp-page="/Matches/RoundDetail" asp-route-matchId="@Model.Match.Id"
+                                   asp-route-roundNumber="@round.RoundNumber"
+                                   class="btn btn-sm btn-outline-primary">Details</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@if (Model.Match.ErrorMessage != null)
+{
+    <div class="alert alert-danger mt-4">
+        <strong>Error:</strong> @Model.Match.ErrorMessage
+    </div>
+}
+
+@if (Model.Match.Status is MatchStatus.Running or MatchStatus.Pending)
+{
+    <script>
+        setTimeout(() => location.reload(), 5000);
+    </script>
+}
+
+@functions {
+    string GetStatusBadgeClass(MatchStatus status) => status switch
+    {
+        MatchStatus.Pending => "bg-secondary",
+        MatchStatus.Running => "bg-primary",
+        MatchStatus.Paused => "bg-warning text-dark",
+        MatchStatus.Completed => "bg-success",
+        MatchStatus.Cancelled => "bg-dark",
+        MatchStatus.Failed => "bg-danger",
+        _ => "bg-secondary"
+    };
+}

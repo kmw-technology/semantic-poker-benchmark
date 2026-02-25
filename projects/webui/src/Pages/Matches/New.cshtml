@@ -1,0 +1,96 @@
+@page
+@model SemanticPoker.WebUI.Pages.Matches.NewModel
+@{
+    ViewData["Title"] = "New Match";
+}
+
+<h1><i class="bi bi-plus-circle"></i> Start New Match</h1>
+<p class="text-muted">Configure a new benchmark match between LLM models.</p>
+
+@if (Model.ErrorMessage != null)
+{
+    <div class="alert alert-danger">@Model.ErrorMessage</div>
+}
+
+<form method="post">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="mb-0">Select Models</h5></div>
+                <div class="card-body">
+                    @if (!Model.AvailableModels.Any())
+                    {
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> No models available. Ensure Ollama is running with models pulled.
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small">Select at least 3 models for the benchmark.</p>
+                        @foreach (var m in Model.AvailableModels)
+                        {
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="SelectedModels"
+                                       value="@m.ModelId" id="model-@m.ModelId"
+                                       @(Model.SelectedModels.Contains(m.ModelId) ? "checked" : "")>
+                                <label class="form-check-label" for="model-@m.ModelId">
+                                    <strong>@m.DisplayName</strong>
+                                    @if (m.ParameterCount.HasValue)
+                                    {
+                                        <span class="text-muted small">(@((m.ParameterCount.Value / 1_000_000_000.0).ToString("F1"))B params)</span>
+                                    }
+                                    <span class="badge bg-info status-badge">@m.Provider</span>
+                                </label>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="mb-0">Settings</h5></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="totalRounds" class="form-label">Number of Rounds</label>
+                        <select class="form-select" name="TotalRounds" id="totalRounds">
+                            <option value="5" selected="@(Model.TotalRounds == 5)">5</option>
+                            <option value="10" selected="@(Model.TotalRounds == 10)">10 (Default)</option>
+                            <option value="25" selected="@(Model.TotalRounds == 25)">25</option>
+                            <option value="50" selected="@(Model.TotalRounds == 50)">50</option>
+                        </select>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="AdaptivePlay"
+                               value="true" id="adaptivePlay" @(Model.AdaptivePlay ? "checked" : "")>
+                        <label class="form-check-label" for="adaptivePlay">
+                            Adaptive Play
+                            <small class="text-muted d-block">Models see previous round history</small>
+                        </label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="RotateArchitect"
+                               value="true" id="rotateArchitect" @(Model.RotateArchitect ? "checked" : "")>
+                        <label class="form-check-label" for="rotateArchitect">
+                            Rotate Architect
+                            <small class="text-muted d-block">Round-robin architect assignment</small>
+                        </label>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="randomSeed" class="form-label">Random Seed (optional)</label>
+                        <input type="number" class="form-control" name="RandomSeed" id="randomSeed"
+                               value="@Model.RandomSeed" placeholder="Leave empty for random">
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100">
+                <i class="bi bi-play-fill"></i> Start Match
+            </button>
+        </div>
+    </div>
+</form>

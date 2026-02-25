@@ -1,10 +1,177 @@
-﻿@page
+@page
 @model IndexModel
 @{
-    ViewData["Title"] = "Home page";
+    ViewData["Title"] = "Dashboard";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-speedometer2"></i> Dashboard</h1>
+    <a asp-page="/Matches/New" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> New Match
+    </a>
 </div>
+
+<!-- Status Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">System Status</h5>
+                @if (Model.Health.IsHealthy)
+                {
+                    <span class="badge bg-success fs-6"><i class="bi bi-check-circle"></i> Healthy</span>
+                }
+                else
+                {
+                    <span class="badge bg-danger fs-6"><i class="bi bi-x-circle"></i> Issues</span>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Ollama</h5>
+                @if (Model.Health.OllamaConnected)
+                {
+                    <p class="card-text fs-4 mb-0">@Model.Health.AvailableModels models</p>
+                }
+                else
+                {
+                    <span class="badge bg-warning fs-6">Disconnected</span>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Total Matches</h5>
+                <p class="card-text fs-4 mb-0">@Model.TotalMatches</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-center">
+            <div class="card-body">
+                <h5 class="card-title text-muted">Rounds Played</h5>
+                <p class="card-text fs-4 mb-0">@Model.TotalCompletedRounds</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Matches -->
+@if (Model.ActiveMatches.Any())
+{
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-lightning"></i> Active Matches</h5>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Match ID</th>
+                        <th>Status</th>
+                        <th>Progress</th>
+                        <th>Models</th>
+                        <th>Started</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var match in Model.ActiveMatches)
+                    {
+                        <tr>
+                            <td><code>@match.Id.ToString()[..8]</code></td>
+                            <td>
+                                <span class="badge @GetStatusBadgeClass(match.Status) status-badge">
+                                    @match.Status
+                                </span>
+                            </td>
+                            <td>
+                                <div class="progress" style="width: 120px; height: 20px;">
+                                    <div class="progress-bar" role="progressbar"
+                                         style="width: @(match.TotalRounds > 0 ? (int)(100.0 * match.CompletedRounds / match.TotalRounds) : 0)%">
+                                        @match.CompletedRounds/@match.TotalRounds
+                                    </div>
+                                </div>
+                            </td>
+                            <td>@match.ModelIds.Count models</td>
+                            <td>@(match.StartedAt?.ToString("HH:mm:ss") ?? "-")</td>
+                            <td>
+                                <a asp-page="/Matches/Detail" asp-route-id="@match.Id"
+                                   class="btn btn-sm btn-outline-primary">View</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+}
+
+<!-- Recent Matches -->
+<div class="card">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-clock-history"></i> Recent Matches</h5>
+    </div>
+    <div class="card-body p-0">
+        @if (!Model.RecentMatches.Any())
+        {
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-inbox fs-1"></i>
+                <p class="mt-2">No matches yet. Start a new match to begin benchmarking.</p>
+            </div>
+        }
+        else
+        {
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Match ID</th>
+                        <th>Status</th>
+                        <th>Rounds</th>
+                        <th>Models</th>
+                        <th>Created</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var match in Model.RecentMatches)
+                    {
+                        <tr>
+                            <td><code>@match.Id.ToString()[..8]</code></td>
+                            <td>
+                                <span class="badge @GetStatusBadgeClass(match.Status) status-badge">
+                                    @match.Status
+                                </span>
+                            </td>
+                            <td>@match.CompletedRounds/@match.TotalRounds</td>
+                            <td>@string.Join(", ", match.ModelIds)</td>
+                            <td>@match.CreatedAt.ToString("yyyy-MM-dd HH:mm")</td>
+                            <td>
+                                <a asp-page="/Matches/Detail" asp-route-id="@match.Id"
+                                   class="btn btn-sm btn-outline-primary">View</a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</div>
+
+@functions {
+    string GetStatusBadgeClass(MatchStatus status) => status switch
+    {
+        MatchStatus.Pending => "bg-secondary",
+        MatchStatus.Running => "bg-primary",
+        MatchStatus.Paused => "bg-warning text-dark",
+        MatchStatus.Completed => "bg-success",
+        MatchStatus.Cancelled => "bg-dark",
+        MatchStatus.Failed => "bg-danger",
+        _ => "bg-secondary"
+    };
+}
