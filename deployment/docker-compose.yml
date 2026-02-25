@@ -1,0 +1,94 @@
+version: "3.8"
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: spb-ollama
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - benchmark-net
+
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: spb-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ../scripts/ollama-init.sh:/scripts/ollama-init.sh:ro
+    entrypoint: ["/bin/sh", "/scripts/ollama-init.sh"]
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    networks:
+      - benchmark-net
+
+  api:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.api
+    container_name: spb-api
+    ports:
+      - "${API_PORT:-5000}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__BenchmarkDb=Data Source=/app/data/benchmark.db
+      - Ollama__BaseUrl=http://ollama:11434
+      - Serilog__MinimumLevel__Default=${LOG_LEVEL:-Information}
+    volumes:
+      - api-data:/app/data
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - benchmark-net
+
+  webui:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.webui
+    container_name: spb-webui
+    ports:
+      - "${WEBUI_PORT:-5010}:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=${ASPNETCORE_ENVIRONMENT:-Production}
+      - ASPNETCORE_URLS=http://+:8080
+      - BenchmarkApi__BaseUrl=http://api:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - benchmark-net
+
+volumes:
+  ollama-data:
+  api-data:
+
+networks:
+  benchmark-net:
+    driver: bridge

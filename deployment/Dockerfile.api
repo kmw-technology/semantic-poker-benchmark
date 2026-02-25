@@ -1,0 +1,33 @@
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+WORKDIR /src
+
+# Copy solution and project files
+COPY SemanticPokerBenchmark.sln ./
+COPY projects/shared/src/SemanticPoker.Shared.csproj projects/shared/src/
+COPY projects/game-engine/src/SemanticPoker.GameEngine.csproj projects/game-engine/src/
+COPY projects/orchestrator/src/SemanticPoker.Api.csproj projects/orchestrator/src/
+
+# Restore
+RUN dotnet restore projects/orchestrator/src/SemanticPoker.Api.csproj
+
+# Copy source
+COPY projects/shared/src/ projects/shared/src/
+COPY projects/game-engine/src/ projects/game-engine/src/
+COPY projects/orchestrator/src/ projects/orchestrator/src/
+
+# Build and publish
+RUN dotnet publish projects/orchestrator/src/SemanticPoker.Api.csproj \
+    -c Release -o /app/publish --no-restore
+
+# Runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /app/publish .
+
+RUN mkdir -p /app/data
+
+EXPOSE 8080
+ENTRYPOINT ["dotnet", "SemanticPoker.Api.dll"]
