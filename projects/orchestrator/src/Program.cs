@@ -27,8 +27,10 @@ builder.Services.AddSingleton<IScoreCalculator, ScoreCalculator>();
 builder.Services.AddSingleton<SentenceTemplateRegistry>();
 builder.Services.AddSingleton<ISentenceEngine, SentenceTemplateEngine>();
 
-// LLM Adapter
-builder.Services.AddSingleton<ILlmAdapter, OllamaAdapter>();
+// LLM Adapters (composite routes to correct provider by model ID prefix)
+builder.Services.AddSingleton<OllamaAdapter>();
+builder.Services.AddSingleton<OpenAiAdapter>();
+builder.Services.AddSingleton<ILlmAdapter, CompositeAdapter>();
 
 // Orchestration services
 builder.Services.AddSingleton<PromptBuilder>();
@@ -81,6 +83,29 @@ builder.Services.AddHttpClient("Ollama", (sp, client) =>
     var baseUrl = config["Ollama:BaseUrl"] ?? "http://localhost:11434";
     client.BaseAddress = new Uri(baseUrl);
     client.Timeout = TimeSpan.FromSeconds(180);
+});
+
+// HttpClient for OpenAI
+builder.Services.AddHttpClient("OpenAI", (sp, client) =>
+{
+    var config = sp.GetRequiredService<IConfiguration>();
+    var apiKey = config["OpenAi:ApiKey"] ?? "";
+    var orgId = config["OpenAi:OrganizationId"] ?? "";
+    var projectId = config["OpenAi:ProjectId"] ?? "";
+    client.BaseAddress = new Uri("https://api.openai.com");
+    if (!string.IsNullOrWhiteSpace(apiKey))
+    {
+        client.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
+    }
+    if (!string.IsNullOrWhiteSpace(orgId))
+    {
+        client.DefaultRequestHeaders.Add("OpenAI-Organization", orgId);
+    }
+    if (!string.IsNullOrWhiteSpace(projectId))
+    {
+        client.DefaultRequestHeaders.Add("OpenAI-Project", projectId);
+    }
+    client.Timeout = TimeSpan.FromSeconds(120);
 });
 
 var app = builder.Build();

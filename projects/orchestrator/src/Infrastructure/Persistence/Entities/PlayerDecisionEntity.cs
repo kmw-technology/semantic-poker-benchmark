@@ -17,5 +17,12 @@ public class PlayerDecisionEntity
     public int CompletionTokens { get; set; }
     public double ResponseTimeMs { get; set; }
 
+    // Debug/trace fields
+    public string? SystemPrompt { get; set; }
+    public string? UserPrompt { get; set; }
+    public string? ParseStrategy { get; set; }
+    public bool ParseSuccess { get; set; } = true;
+    public string? FinishReason { get; set; }
+
     public RoundEntity Round { get; set; } = null!;
 }

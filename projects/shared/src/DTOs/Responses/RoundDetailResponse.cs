@@ -19,6 +19,14 @@ public class PlayerDecisionDto
     public int ScoreChange { get; set; }
     public string? Reasoning { get; set; }
     public double ResponseTimeMs { get; set; }
+    public string? RawResponse { get; set; }
+    public int PromptTokens { get; set; }
+    public int CompletionTokens { get; set; }
+    public string? SystemPrompt { get; set; }
+    public string? UserPrompt { get; set; }
+    public string? ParseStrategy { get; set; }
+    public bool ParseSuccess { get; set; }
+    public string? FinishReason { get; set; }
 }
 
 public class RoundDetailResponse : RoundResponse

@@ -8,16 +8,9 @@ services:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama-data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
+      test: ["CMD", "ollama", "list"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -51,6 +44,9 @@ services:
       - ASPNETCORE_URLS=http://+:8080
       - ConnectionStrings__BenchmarkDb=Data Source=/app/data/benchmark.db
       - Ollama__BaseUrl=http://ollama:11434
+      - OpenAi__ApiKey=${OpenAi__ApiKey:-}
+      - OpenAi__OrganizationId=${OpenAi__OrganizationId:-}
+      - OpenAi__ProjectId=${OpenAi__ProjectId:-}
       - Serilog__MinimumLevel__Default=${LOG_LEVEL:-Information}
     volumes:
       - api-data:/app/data

@@ -15,9 +15,9 @@
 
 ## Aktuelle Projekt-Phase
 
-**Phase:** Implementation Complete (Phase 1-6 fertig)
+**Phase:** Implementation Complete (Phase 1-6 + Interactive Mode + Spectator + OpenAI)
 **Status:** Alle Kernfunktionalität implementiert, Build + 189 Tests bestanden
-**Nächste Schritte:** Docker-Deployment testen, echte Matches mit Ollama laufen lassen
+**Nächste Schritte:** Docker-Deployment testen, echte Matches mit Ollama + OpenAI laufen lassen
 
 ---
 
@@ -39,7 +39,7 @@
 |---------|------|------------|----------|
 | **SemanticPoker.Shared** | `projects/shared/src/` | KEINE | Enums, Models, Interfaces, DTOs |
 | **SemanticPoker.GameEngine** | `projects/game-engine/src/` | → Shared | StateGenerator, 13 SentenceTemplates, ScoreCalculator |
-| **SemanticPoker.Api** | `projects/orchestrator/src/` | → Shared, GameEngine | REST API, EF Core, Ollama, Match-Orchestrierung |
+| **SemanticPoker.Api** | `projects/orchestrator/src/` | → Shared, GameEngine | REST API, EF Core, LLM Adapters, Match-Orchestrierung |
 | **SemanticPoker.WebUI** | `projects/webui/src/` | → Shared **NUR** | Razor Pages, BenchmarkApiClient via HTTP |
 | 5 Test-Projekte | `*/tests/` | xUnit | 189 Tests |
 
@@ -65,7 +65,23 @@ VERBOTEN:
 | Ollama | 11434 | - |
 | SignalR Hub | 5000/hubs/match-progress | - |
 
-### API Endpoints (14)
+### LLM Providers (CompositeAdapter Pattern)
+
+Die `ILlmAdapter`-Implementierung ist ein `CompositeAdapter`, der Requests anhand des Model-ID-Prefix an den richtigen Sub-Adapter routet:
+
+| Provider | Adapter | Model-ID-Prefix | Beispiel |
+|----------|---------|-----------------|----------|
+| **Ollama** | `OllamaAdapter` | (kein Prefix) | `phi3.5:latest`, `llama3.2:3b` |
+| **OpenAI** | `OpenAiAdapter` | `openai:` | `openai:gpt-5-mini:low` |
+
+**OpenAI Model-ID Format:** `openai:{model}:{reasoning_effort}` → z.B. `openai:gpt-5-mini:medium`
+
+**Dateien:**
+- `projects/orchestrator/src/Infrastructure/LlmAdapters/OllamaAdapter.cs`
+- `projects/orchestrator/src/Infrastructure/LlmAdapters/OpenAiAdapter.cs`
+- `projects/orchestrator/src/Infrastructure/LlmAdapters/CompositeAdapter.cs`
+
+### API Endpoints (17)
 
 | Route | Method | Controller |
 |-------|--------|------------|
@@ -76,12 +92,36 @@ VERBOTEN:
 | `/api/matches/{id}/pause` | POST | MatchesController |
 | `/api/matches/{id}/resume` | POST | MatchesController |
 | `/api/matches/{id}/cancel` | POST | MatchesController |
+| `/api/matches/interactive` | POST | MatchesController |
+| `/api/matches/{id}/interactive-state` | GET | MatchesController |
+| `/api/matches/{id}/human-input?playerId=` | POST | MatchesController |
 | `/api/models` | GET | ModelsController |
 | `/api/leaderboard` | GET | LeaderboardController |
 | `/api/health` | GET | HealthController |
 | `/api/debug/generate-state` | POST | DebugController |
 | `/api/debug/generate-sentences` | POST | DebugController |
 | `/api/debug/test-prompt` | POST | DebugController |
+| `/api/debug/matches/{id}/trace` | GET | DebugController |
+| `/api/debug/matches/{id}/llm-stats` | GET | DebugController |
+| `/api/debug/matches/{id}/raw-responses` | GET | DebugController |
+| `/api/debug/matches/{id}/rounds/{num}/prompts` | GET | DebugController |
+| `/api/debug/parse-failures` | GET | DebugController |
+
+### Web UI Pages (11)
+
+| Seite | Pfad | Funktion |
+|-------|------|----------|
+| Dashboard | `/` | Übersicht, aktive Matches, Statistiken |
+| New Match | `/Matches/New` | Neues automatisches Match starten |
+| Match Detail | `/Matches/Detail/{id}` | Match-Details, Runden-Ergebnisse |
+| Round Detail | `/Matches/Detail/Round/{id}/{num}` | Einzel-Runden-Analyse |
+| Leaderboard | `/Leaderboard` | Rangliste aller Modelle |
+| Analysis | `/Analysis` | Erweiterte Analyse-Diagramme |
+| Debug | `/Debug` | Debug-Tools für Entwickler |
+| Lobby Create | `/Lobby/Create` | Interaktives Match erstellen (Spieler-Slots) |
+| Lobby Play | `/Lobby/Play/{id}` | Als Mensch mitspielen (Echtzeit) |
+| Spectate Index | `/Spectate` | Liste aller Live-Spiele |
+| Spectate Watch | `/Spectate/Watch/{id}` | Match live zuschauen (Read-Only) |
 
 ### Game Engine (13 Sentence Templates)
 
@@ -109,12 +149,17 @@ VERBOTEN:
 |--------------|------------|
 | C# / ASP.NET Core 8 | User-Präferenz, starkes Typsystem |
 | SQLite via EF Core | Einfach, kein Setup, reicht für Benchmarks |
-| Ollama für LLM-Serving | Docker, GPU, OpenAI-kompatible API |
+| Ollama + OpenAI (dual provider) | Lokale + Cloud-Modelle im selben Benchmark vergleichbar |
+| CompositeAdapter Pattern | Routet "openai:*" → OpenAI, sonst → Ollama. Zero Änderungen an Consumern |
 | Template-basierte Sentences | 13 rigide Templates, deterministisch |
 | Round-Robin Architect | `(roundNumber - 1) % modelCount` |
 | Adaptive Play | Letzte 5 Runden als Kontext |
 | Channel-based Queue | Background-Service für Match-Execution |
 | SignalR | Echtzeit-Updates für Match-Fortschritt |
+| PlayerSlot-basierte Lobby | Dynamisch Human/LLM-Slots, min. 3 Spieler, max. 8 |
+| HumanInputCoordinator | TCS-basierte Brücke: HTTP-Endpoint ↔ Game-Loop (composite key: matchId + playerId) |
+| Human-Player Convention | `"human:{Name}"` als ModelId, `IsHumanPlayer(id) => id.StartsWith("human:")` |
+| OpenAI Reasoning Effort | Im Model-ID codiert: `openai:gpt-5-mini:low` → model=gpt-5-mini, reasoning_effort=low |
 
 ---
 
@@ -124,32 +169,59 @@ VERBOTEN:
 |---------|-----------|
 | Tech-Stack | ASP.NET Core C# Razor Pages |
 | API-First | UI konsumiert nur über HTTP |
+| **Runtime** | **IMMER Docker-Container verwenden! NIEMALS lokale `dotnet run` Instanzen starten!** |
 | Autonomie | Autonom aber kritisch — bei Problemen nachfragen |
 | Dokumentation | IMMER und UNGEFRAGT wichtige Dinge dokumentieren |
 | Sprache | Mix Deutsch/Englisch OK, Code immer Englisch |
+
+### DOCKER-FIRST (KRITISCH!)
+- API und WebUI laufen **ausschließlich als Docker-Container** (`docker compose -f deployment/docker-compose.yml up -d`)
+- **NIEMALS** `dotnet run --project projects/orchestrator/src/` oder `dotnet run --project projects/webui/src/` verwenden!
+- Lokale `dotnet run` Instanzen verursachen Port-Konflikte (binden auf `localhost:5000` vor Docker `0.0.0.0:5000`)
+- Bei Port-Konflikten: `netstat -ano | grep ":5000"` prüfen, lokale Prozesse stoppen
+- Für Code-Änderungen: `docker compose -f deployment/docker-compose.yml up -d --build` (neu bauen)
 
 ---
 
 ## Deployment
 
-### Docker (Empfohlen)
+### Docker (EINZIGE Runtime-Methode!)
 ```bash
 cp deployment/.env.example deployment/.env
-docker compose -f deployment/docker-compose.yml up -d
+# OpenAI API Key, Org-ID, Project-ID in .env eintragen
+docker compose -f deployment/docker-compose.yml up -d          # Starten
+docker compose -f deployment/docker-compose.yml up -d --build  # Nach Code-Änderungen
+docker compose -f deployment/docker-compose.yml down            # Stoppen
 ```
 
-### Lokal
+### Nur für Build & Tests (NICHT zum Laufen!)
 ```bash
-dotnet build                                           # Build
+dotnet build                                           # Build prüfen
 dotnet test                                            # 189 Tests
-dotnet run --project projects/orchestrator/src/        # API auf :5000
-dotnet run --project projects/webui/src/               # UI auf :5010
+# NICHT: dotnet run! → Immer Docker verwenden!
 ```
 
-### LLM-Modelle (Ollama)
+### Umgebungsvariablen für OpenAI (lokal)
+```bash
+export OpenAi__ApiKey="sk-..."
+export OpenAi__OrganizationId="org-..."
+export OpenAi__ProjectId="proj_..."
+```
+
+### LLM-Modelle
+
+**Ollama (lokal):**
 - `phi3.5` — Phi-3.5-mini-instruct
 - `deepseek-r1:1.5b` — DeepSeek-R1-Distill-Qwen-1.5B
 - `llama3.2:3b` — Llama-3.2-3B
+
+**OpenAI (Cloud, API Key erforderlich):**
+- `openai:gpt-5-mini:low` — GPT-5 Mini, Low Reasoning
+- `openai:gpt-5-mini:medium` — GPT-5 Mini, Medium Reasoning
+- `openai:gpt-5-mini:high` — GPT-5 Mini, High Reasoning
+- `openai:gpt-5-nano:low` — GPT-5 Nano, Low Reasoning
+- `openai:gpt-5-nano:medium` — GPT-5 Nano, Medium Reasoning
+- `openai:gpt-5-nano:high` — GPT-5 Nano, High Reasoning
 
 ---
 
@@ -163,6 +235,9 @@ dotnet run --project projects/webui/src/               # UI auf :5010
 | Phase 4 | Web UI (7 Seiten) | DONE | c720cb8 |
 | Phase 5 | Debug Page + SignalR | DONE | 117b193 |
 | Phase 6 | CI Pipeline + README | DONE | 47d2035 |
+| Interactive Lobby | Human+LLM PlayerSlots, HumanInputCoordinator | DONE | 4c89aa0 |
+| Spectator Mode | Live Games Listing + Watch Page | DONE | - |
+| OpenAI Integration | 6 Models, CompositeAdapter, Reasoning Effort | DONE | - |
 
 ---
 
@@ -172,6 +247,21 @@ dotnet run --project projects/webui/src/               # UI auf :5010
 |---------|---------|
 | Placeholder Tests | Api.Tests, WebUI.Tests, E2E.Tests, Shared.Tests haben nur je 1 Placeholder-Test |
 | Kein Polly Retry | HttpClient für WebUI→API hat kein Polly konfiguriert (Package vorhanden, aber nicht genutzt) |
+| OpenAI Kosten | OpenAI-Modelle kosten Geld pro API-Call — Vorsicht bei vielen Runden! |
+| Schema-Änderung | Nach Änderungen an MatchEntity muss `benchmark.db` gelöscht werden (EnsureCreatedAsync) |
+| Docker Port-Konflikt | Wenn lokale `dotnet run` + Docker gleichzeitig laufen, bindet localhost auf lokale Instanz → WebUI sieht andere DB! |
+| Docker GPU | `docker-compose.yml` hat KEINE NVIDIA GPU Reservation — System hat keine NVIDIA GPU |
+| Docker Healthcheck | Ollama Healthcheck nutzt `ollama list` (nicht curl — curl fehlt im Image) |
+| Dockerfile --no-restore | Entfernt! `dotnet publish` macht eigenen Restore, da transitive Pakete sonst fehlen |
+
+---
+
+## Bekannte Razor-Pitfalls
+
+| Problem | Lösung |
+|---------|--------|
+| `@keyframes` in CSS-Block | `@@keyframes` verwenden (doppeltes @) |
+| `@model` als Variable in foreach | `@(model)` verwenden (Klammern) |
 
 ---
 

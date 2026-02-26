@@ -25,7 +25,7 @@ public interface IBenchmarkApiClient
     Task<TestPromptResponse> TestPromptAsync(TestPromptRequest request);
     Task<MatchResponse?> CreateInteractiveMatchAsync(CreateInteractiveMatchRequest request);
     Task<InteractiveMatchStateResponse?> GetInteractiveStateAsync(Guid matchId);
-    Task<bool> SubmitHumanInputAsync(Guid matchId, SubmitHumanInputRequest input);
+    Task<bool> SubmitHumanInputAsync(Guid matchId, string playerId, SubmitHumanInputRequest input);
 }
 
 public class BenchmarkApiClient : IBenchmarkApiClient
@@ -173,9 +173,11 @@ public class BenchmarkApiClient : IBenchmarkApiClient
         }
     }
 
-    public async Task<bool> SubmitHumanInputAsync(Guid matchId, SubmitHumanInputRequest input)
+    public async Task<bool> SubmitHumanInputAsync(Guid matchId, string playerId, SubmitHumanInputRequest input)
     {
-        var response = await _http.PostAsJsonAsync($"/api/matches/{matchId}/human-input", input, JsonOptions);
+        var encodedPlayerId = Uri.EscapeDataString(playerId);
+        var response = await _http.PostAsJsonAsync(
+            $"/api/matches/{matchId}/human-input?playerId={encodedPlayerId}", input, JsonOptions);
         return response.IsSuccessStatusCode;
     }
 }

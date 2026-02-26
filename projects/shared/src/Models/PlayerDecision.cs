@@ -15,4 +15,11 @@ public class PlayerDecision
     public int PromptTokens { get; set; }
     public int CompletionTokens { get; set; }
     public double ResponseTimeMs { get; set; }
+
+    // Debug/trace fields — saved to DB for post-game analysis
+    public string? SystemPrompt { get; set; }
+    public string? UserPrompt { get; set; }
+    public string? ParseStrategy { get; set; }
+    public bool ParseSuccess { get; set; } = true;
+    public string? FinishReason { get; set; }
 }

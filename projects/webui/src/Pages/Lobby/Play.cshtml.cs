@@ -17,6 +17,12 @@ public class PlayModel : PageModel
     public MatchResponse? Match { get; set; }
     public InteractiveMatchStateResponse? GameState { get; set; }
 
+    /// <summary>
+    /// The current viewer's player ID (e.g. "human:Alice"). From ?player= query param.
+    /// </summary>
+    [BindProperty(SupportsGet = true, Name = "player")]
+    public string? PlayerId { get; set; }
+
     [BindProperty]
     public string? Sentence1 { get; set; }
 
@@ -40,6 +46,12 @@ public class PlayModel : PageModel
         Match = await _api.GetMatchAsync(id);
         if (Match == null) return NotFound();
 
+        // Auto-detect PlayerId if not provided and match has exactly 1 human
+        if (string.IsNullOrEmpty(PlayerId) && Match.HumanPlayerNames.Count == 1)
+        {
+            PlayerId = $"human:{Match.HumanPlayerNames[0]}";
+        }
+
         GameState = await _api.GetInteractiveStateAsync(id);
         return Page();
     }
@@ -57,20 +69,26 @@ public class PlayModel : PageModel
             return await OnGetAsync(id);
         }
 
+        if (string.IsNullOrEmpty(PlayerId))
+        {
+            ErrorMessage = "Player ID is missing.";
+            return await OnGetAsync(id);
+        }
+
         var request = new SubmitHumanInputRequest
         {
             InputType = PlayerRole.Architect,
             ArchitectSentences = sentences
         };
 
-        var success = await _api.SubmitHumanInputAsync(id, request);
+        var success = await _api.SubmitHumanInputAsync(id, PlayerId, request);
         if (!success)
         {
             ErrorMessage = "Failed to submit input. Please try again.";
             return await OnGetAsync(id);
         }
 
-        return RedirectToPage(new { id });
+        return RedirectToPage(new { id, player = PlayerId });
     }
 
     public async Task<IActionResult> OnPostPlayerAsync(Guid id)
@@ -81,6 +99,12 @@ public class PlayModel : PageModel
             return await OnGetAsync(id);
         }
 
+        if (string.IsNullOrEmpty(PlayerId))
+        {
+            ErrorMessage = "Player ID is missing.";
+            return await OnGetAsync(id);
+        }
+
         var request = new SubmitHumanInputRequest
         {
             InputType = PlayerRole.Player,
@@ -88,13 +112,13 @@ public class PlayModel : PageModel
             Reasoning = Reasoning?.Trim()
         };
 
-        var success = await _api.SubmitHumanInputAsync(id, request);
+        var success = await _api.SubmitHumanInputAsync(id, PlayerId, request);
         if (!success)
         {
             ErrorMessage = "Failed to submit input. Please try again.";
             return await OnGetAsync(id);
         }
 
-        return RedirectToPage(new { id });
+        return RedirectToPage(new { id, player = PlayerId });
     }
 }

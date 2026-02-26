@@ -1,0 +1,424 @@
+@page "{id:guid}"
+@model SemanticPoker.WebUI.Pages.Spectate.WatchModel
+@{
+    ViewData["Title"] = "Spectating";
+}
+
+@if (Model.Match is null)
+{
+    <div class="alert alert-danger">Match not found.</div>
+    return;
+}
+
+@{
+    var isCompleted = Model.Match.Status == MatchStatus.Completed;
+    var isCancelled = Model.Match.Status == MatchStatus.Cancelled;
+    var isFailed = Model.Match.Status == MatchStatus.Failed;
+    var isFinished = isCompleted || isCancelled || isFailed;
+    var isWaitingForHuman = Model.GameState?.IsHumanTurn == true;
+    var currentPlayerId = Model.GameState?.CurrentPlayerId;
+    var currentRound = Model.GameState?.CurrentRound ?? Model.Match.CompletedRounds;
+    var totalRounds = Model.Match.TotalRounds;
+    var pct = totalRounds > 0 ? (int)(100.0 * Model.Match.CompletedRounds / totalRounds) : 0;
+    var humanRole = Model.GameState?.HumanRole;
+}
+
+@section Styles {
+<style>
+    .spectator-badge {
+        background: linear-gradient(135deg, #0f172a, #1e293b);
+        color: #94a3b8;
+        padding: 0.3rem 0.75rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+    }
+    .spectator-badge i { color: #64748b; }
+    .live-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: #fef2f2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+        padding: 0.2rem 0.6rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .live-indicator .dot {
+        width: 8px; height: 8px;
+        background: #ef4444;
+        border-radius: 50%;
+        animation: blink 1.5s infinite;
+    }
+    @@keyframes blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.3; }
+    }
+    .action-card {
+        border-radius: 10px;
+        border: 1px solid #e2e8f0;
+    }
+    .action-card .card-header {
+        border-radius: 10px 10px 0 0;
+    }
+</style>
+}
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <div>
+        <h1 class="mb-1">
+            <i class="bi bi-eye-fill text-muted"></i>
+            Spectating
+            <code>@Model.Match.Id.ToString()[..8]</code>
+        </h1>
+        <div class="d-flex align-items-center gap-2">
+            <span class="badge @GetStatusBadgeClass(Model.Match.Status) fs-6">@Model.Match.Status</span>
+            <span class="spectator-badge"><i class="bi bi-eye me-1"></i> SPECTATOR</span>
+            @if (!isFinished)
+            {
+                <span class="live-indicator"><span class="dot"></span> LIVE</span>
+            }
+        </div>
+    </div>
+    <div class="text-end">
+        <span class="fs-5 fw-bold">Round @currentRound of @totalRounds</span>
+    </div>
+</div>
+
+<!-- Progress bar -->
+<div class="mb-4">
+    <div class="progress" style="height: 20px;">
+        <div class="progress-bar @(pct == 100 ? "bg-success" : "bg-primary")" role="progressbar"
+             style="width: @pct%">@pct%</div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Main content area -->
+    <div class="col-lg-8 order-2 order-lg-1">
+
+        @* ===== Match completed ===== *@
+        @if (isCompleted)
+        {
+            <div class="card border-success mb-4 action-card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-trophy-fill"></i> Match Complete!</h5>
+                </div>
+                <div class="card-body">
+                    @{
+                        var sortedScores = Model.Match.Scores.OrderByDescending(kv => kv.Value).ToList();
+                        var winner = sortedScores.FirstOrDefault();
+                        var rank = 0;
+                    }
+                    @if (winner.Key != null)
+                    {
+                        <div class="text-center mb-4">
+                            <h3 class="text-warning"><i class="bi bi-trophy-fill"></i> Winner: @winner.Key</h3>
+                            <p class="fs-4">Score: <strong>@(winner.Value > 0 ? "+" : "")@winner.Value</strong></p>
+                        </div>
+                    }
+                    <table class="table table-hover mb-0">
+                        <thead><tr><th>Rank</th><th>Player</th><th class="text-center">Final Score</th></tr></thead>
+                        <tbody>
+                            @foreach (var kv in sortedScores)
+                            {
+                                rank++;
+                                var isHumanPlayer = kv.Key.StartsWith("human:");
+                                <tr class="@(rank == 1 ? "table-warning" : "")">
+                                    <td>
+                                        @if (rank == 1) { <i class="bi bi-trophy-fill text-warning"></i> }
+                                        @rank
+                                    </td>
+                                    <td>
+                                        @kv.Key
+                                        @if (isHumanPlayer) { <span class="badge bg-info ms-1">Human</span> }
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
+                                            @(kv.Value > 0 ? "+" : "")@kv.Value
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    <div class="text-center mt-3">
+                        <a asp-page="/Replay/Index" asp-route-id="@Model.Match.Id" class="btn btn-primary">
+                            <i class="bi bi-play-circle"></i> Replay
+                        </a>
+                        <a asp-page="/Matches/Detail" asp-route-id="@Model.Match.Id" class="btn btn-outline-primary ms-2">
+                            <i class="bi bi-list-ol"></i> Full Match Details
+                        </a>
+                        <a asp-page="/Spectate/Index" class="btn btn-outline-secondary ms-2">
+                            <i class="bi bi-broadcast"></i> Back to Live Games
+                        </a>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* ===== Cancelled or Failed ===== *@
+        else if (isCancelled || isFailed)
+        {
+            <div class="card border-danger mb-4 action-card">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="bi bi-x-circle-fill"></i> Match @(isCancelled ? "Cancelled" : "Failed")</h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Match.ErrorMessage != null)
+                    {
+                        <div class="alert alert-danger">@Model.Match.ErrorMessage</div>
+                    }
+                    <a asp-page="/Spectate/Index" class="btn btn-outline-secondary">
+                        <i class="bi bi-broadcast"></i> Back to Live Games
+                    </a>
+                </div>
+            </div>
+        }
+
+        @* ===== Waiting for human input ===== *@
+        else if (isWaitingForHuman && currentPlayerId != null)
+        {
+            <div class="card mb-4 action-card">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-hourglass-split"></i>
+                        Waiting for @currentPlayerId
+                        @if (humanRole == PlayerRole.Architect)
+                        {
+                            <span class="ms-1">to write architect sentences</span>
+                        }
+                        else if (humanRole == PlayerRole.Player)
+                        {
+                            <span class="ms-1">to choose a door</span>
+                        }
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @{ await Html.RenderPartialAsync("_SpectatorRoundData", Model.GameState); }
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-info mb-2" role="status" style="width: 2rem; height: 2rem;">
+                            <span class="visually-hidden">Waiting...</span>
+                        </div>
+                        <p class="text-muted mb-0">
+                            A human player is making their decision. This page updates automatically.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* ===== LLMs processing ===== *@
+        else if (!isFinished)
+        {
+            <div class="card mb-4 action-card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-cpu"></i>
+                        @if (Model.GameState?.CurrentArchitectId != null)
+                        {
+                            <span>Round @currentRound &mdash; Architect: @Model.GameState.CurrentArchitectId</span>
+                        }
+                        else
+                        {
+                            <span>Round @currentRound in progress</span>
+                        }
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @{ await Html.RenderPartialAsync("_SpectatorRoundData", Model.GameState); }
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-primary mb-2" role="status" style="width: 2rem; height: 2rem;">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="text-muted mb-0">
+                            @if (Model.GameState?.SpectatorSentences?.Any() == true)
+                            {
+                                <span>Players are choosing doors...</span>
+                            }
+                            else
+                            {
+                                <span>LLM models are playing...</span>
+                            }
+                            This page updates automatically.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* ===== Last round result ===== *@
+        @if (Model.GameState?.LastRoundResult != null && !isCompleted)
+        {
+            var result = Model.GameState.LastRoundResult;
+            <div class="card mb-4 action-card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Round @result.RoundNumber Result</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Architect:</strong> @result.ArchitectModelId</p>
+
+                    <div class="row mb-3">
+                        @foreach (var door in new[] { 'A', 'B', 'C', 'D', 'E' })
+                        {
+                            var isTreasure = door == result.TreasureDoor;
+                            var isTrap = door == result.TrapDoor;
+                            var doorClass = isTreasure ? "bg-success bg-opacity-10 border-success"
+                                : isTrap ? "bg-danger bg-opacity-10 border-danger"
+                                : "bg-light";
+                            <div class="col">
+                                <div class="card @doorClass text-center py-2">
+                                    <strong>@door</strong>
+                                    @if (isTreasure) { <small class="text-success">Treasure</small> }
+                                    else if (isTrap) { <small class="text-danger">Trap</small> }
+                                    else { <small class="text-muted">Empty</small> }
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    @if (result.Sentences?.Any() == true)
+                    {
+                        <h6 class="text-muted mb-2"><i class="bi bi-chat-left-text me-1"></i> Sentences</h6>
+                        <div class="d-flex gap-2 mb-2" style="font-size: 0.75rem;">
+                            <span><span class="d-inline-block rounded" style="width:12px;height:12px;background:#d1fae5;border:1px solid #6ee7b7;"></span> Engine (true)</span>
+                            <span><span class="d-inline-block rounded" style="width:12px;height:12px;background:#fef3c7;border:1px solid #fcd34d;"></span> Architect (deceptive)</span>
+                        </div>
+                        <ol class="list-group list-group-numbered mb-3">
+                            @foreach (var sentence in result.Sentences.Where(s => !string.IsNullOrWhiteSpace(s.Text)))
+                            {
+                                var isEngine = sentence.Source == "Engine";
+                                var bgStyle = isEngine
+                                    ? "background-color: #ecfdf5; border-left: 3px solid #34d399;"
+                                    : "background-color: #fffbeb; border-left: 3px solid #fbbf24;";
+                                <li class="list-group-item py-2" style="@bgStyle">
+                                    @sentence.Text
+                                    <span class="badge @(isEngine ? "bg-success" : "bg-warning text-dark") ms-2" style="font-size: 0.65rem;">
+                                        @(isEngine ? "Engine" : "Architect")
+                                    </span>
+                                </li>
+                            }
+                        </ol>
+                    }
+
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Player</th><th class="text-center">Chose Door</th><th class="text-center">Score Change</th></tr></thead>
+                        <tbody>
+                            @foreach (var choice in result.PlayerChoices)
+                            {
+                                var scoreChange = result.ScoreChanges.GetValueOrDefault(choice.Key, 0);
+                                <tr>
+                                    <td>
+                                        @choice.Key
+                                        @if (choice.Key.StartsWith("human:")) { <span class="badge bg-info ms-1">Human</span> }
+                                    </td>
+                                    <td class="text-center">@choice.Value</td>
+                                    <td class="text-center">
+                                        <span class="@(scoreChange > 0 ? "score-positive" : scoreChange < 0 ? "score-negative" : "score-neutral")">
+                                            @(scoreChange > 0 ? "+" : "")@scoreChange
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Scoreboard sidebar -->
+    <div class="col-lg-4 order-1 order-lg-2">
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-bar-chart"></i> Scoreboard</h5></div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead><tr><th>Player</th><th class="text-center">Score</th></tr></thead>
+                    <tbody>
+                        @foreach (var kv in Model.Match.Scores.OrderByDescending(kv => kv.Value))
+                        {
+                            <tr>
+                                <td>
+                                    @kv.Key
+                                    @if (kv.Key.StartsWith("human:")) { <span class="badge bg-info ms-1">Human</span> }
+                                </td>
+                                <td class="text-center">
+                                    <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
+                                        @(kv.Value > 0 ? "+" : "")@kv.Value
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-info-circle"></i> Match Info</h5></div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li><strong>Match ID:</strong> <code>@Model.Match.Id.ToString()[..8]</code></li>
+                    <li><strong>Players:</strong> @string.Join(", ", Model.Match.ModelIds)</li>
+                    <li><strong>Progress:</strong> @Model.Match.CompletedRounds / @totalRounds rounds</li>
+                    @if (Model.Match.StartedAt.HasValue)
+                    {
+                        <li><strong>Started:</strong> @Model.Match.StartedAt.Value.ToString("HH:mm:ss")</li>
+                    }
+                </ul>
+            </div>
+        </div>
+
+        <a asp-page="/Spectate/Index" class="btn btn-outline-secondary w-100">
+            <i class="bi bi-arrow-left"></i> Back to Live Games
+        </a>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
+    <script>
+        const matchId = '@Model.MatchId';
+        const matchStatus = '@Model.Match.Status';
+        const apiBaseUrl = '@(ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["BenchmarkApi:BaseUrl"] ?? "http://localhost:5000")';
+
+        if (matchStatus !== 'Completed' && matchStatus !== 'Cancelled' && matchStatus !== 'Failed') {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl(apiBaseUrl + '/hubs/match-progress')
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on('WaitingForHumanInput', function() { window.location.reload(); });
+            connection.on('PlayersDeciding', function() { window.location.reload(); });
+            connection.on('RoundCompleted', function() { window.location.reload(); });
+            connection.on('MatchCompleted', function() { window.location.reload(); });
+
+            connection.start()
+                .then(function() { return connection.invoke('JoinMatchGroup', matchId); })
+                .catch(function(err) { console.warn('SignalR failed, polling only:', err); });
+
+            // Fallback polling every 8 seconds
+            setInterval(function() {
+                if (!document.hidden) window.location.reload();
+            }, 8000);
+        }
+    </script>
+}
+
+@functions {
+    string GetStatusBadgeClass(MatchStatus status) => status switch
+    {
+        MatchStatus.Pending => "bg-secondary",
+        MatchStatus.Running => "bg-primary",
+        MatchStatus.Paused => "bg-warning text-dark",
+        MatchStatus.Completed => "bg-success",
+        MatchStatus.Cancelled => "bg-dark",
+        MatchStatus.Failed => "bg-danger",
+        MatchStatus.WaitingForHumanInput => "bg-info",
+        _ => "bg-secondary"
+    };
+}

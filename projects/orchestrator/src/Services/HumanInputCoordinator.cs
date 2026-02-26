@@ -6,17 +6,19 @@ namespace SemanticPoker.Api.Services;
 
 public class HumanInputCoordinator
 {
-    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<HumanInput>> _pendingInputs = new();
+    private readonly ConcurrentDictionary<(Guid matchId, string playerId), TaskCompletionSource<HumanInput>> _pendingInputs = new();
     private readonly ConcurrentDictionary<Guid, HumanInputRequest> _waitingContext = new();
 
     /// <summary>
     /// Called by MatchRunnerService when it needs human input. Blocks until human submits.
     /// </summary>
     public async Task<HumanInput> WaitForHumanInputAsync(
-        Guid matchId, HumanInputRequest request, CancellationToken ct)
+        Guid matchId, string playerId, HumanInputRequest request, CancellationToken ct)
     {
+        var key = (matchId, playerId);
         var tcs = new TaskCompletionSource<HumanInput>(TaskCreationOptions.RunContinuationsAsynchronously);
-        _pendingInputs[matchId] = tcs;
+        _pendingInputs[key] = tcs;
+        request.PlayerId = playerId;
         _waitingContext[matchId] = request;
 
         using var reg = ct.Register(() => tcs.TrySetCanceled(ct));
@@ -27,8 +29,7 @@ public class HumanInputCoordinator
         }
         finally
         {
-            // Only remove if still ours (avoid clearing a newer request from the next round)
-            _pendingInputs.TryRemove(new KeyValuePair<Guid, TaskCompletionSource<HumanInput>>(matchId, tcs));
+            _pendingInputs.TryRemove(new KeyValuePair<(Guid, string), TaskCompletionSource<HumanInput>>(key, tcs));
             _waitingContext.TryRemove(new KeyValuePair<Guid, HumanInputRequest>(matchId, request));
         }
     }
@@ -36,9 +37,10 @@ public class HumanInputCoordinator
     /// <summary>
     /// Called by Controller when human submits input via HTTP.
     /// </summary>
-    public bool SubmitInput(Guid matchId, HumanInput input)
+    public bool SubmitInput(Guid matchId, string playerId, HumanInput input)
     {
-        if (_pendingInputs.TryRemove(matchId, out var tcs))
+        var key = (matchId, playerId);
+        if (_pendingInputs.TryRemove(key, out var tcs))
         {
             return tcs.TrySetResult(input);
         }
@@ -59,9 +61,14 @@ public class HumanInputCoordinator
     /// </summary>
     public void CancelMatch(Guid matchId)
     {
-        if (_pendingInputs.TryRemove(matchId, out var tcs))
+        // Cancel all pending inputs for this match
+        var keysToRemove = _pendingInputs.Keys.Where(k => k.matchId == matchId).ToList();
+        foreach (var key in keysToRemove)
         {
-            tcs.TrySetCanceled();
+            if (_pendingInputs.TryRemove(key, out var tcs))
+            {
+                tcs.TrySetCanceled();
+            }
         }
         _waitingContext.TryRemove(matchId, out _);
     }
@@ -72,6 +79,7 @@ public class HumanInputRequest
     public PlayerRole InputType { get; set; }
     public int RoundNumber { get; set; }
     public PlayerRole HumanRole { get; set; }
+    public string? PlayerId { get; set; }
     public char? TreasureDoor { get; set; }
     public char? TrapDoor { get; set; }
     public List<string>? EngineSentences { get; set; }

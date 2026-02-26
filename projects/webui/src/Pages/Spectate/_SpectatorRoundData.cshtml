@@ -1,0 +1,60 @@
+@using SemanticPoker.Shared.DTOs.Responses
+@model InteractiveMatchStateResponse
+
+@if (Model == null) { return; }
+
+@{
+    var hasDoors = Model.SpectatorTreasureDoor.HasValue && Model.SpectatorTrapDoor.HasValue;
+    var hasSentences = Model.SpectatorSentences?.Any(s => !string.IsNullOrWhiteSpace(s.Text)) == true;
+}
+
+@if (hasDoors)
+{
+    <div class="mb-3">
+        <h6 class="text-muted mb-2"><i class="bi bi-door-open me-1"></i> Doors</h6>
+        <div class="row g-2">
+            @foreach (var door in new[] { 'A', 'B', 'C', 'D', 'E' })
+            {
+                var isTreasure = door == Model.SpectatorTreasureDoor;
+                var isTrap = door == Model.SpectatorTrapDoor;
+                var doorClass = isTreasure ? "bg-success bg-opacity-10 border-success"
+                    : isTrap ? "bg-danger bg-opacity-10 border-danger"
+                    : "bg-light";
+                <div class="col">
+                    <div class="card @doorClass text-center py-2">
+                        <strong>@door</strong>
+                        @if (isTreasure) { <small class="text-success">Treasure</small> }
+                        else if (isTrap) { <small class="text-danger">Trap</small> }
+                        else { <small class="text-muted">Empty</small> }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@if (hasSentences)
+{
+    <div class="mb-3">
+        <h6 class="text-muted mb-2"><i class="bi bi-chat-left-text me-1"></i> Sentences (shuffled)</h6>
+        <div class="d-flex gap-2 mb-2" style="font-size: 0.75rem;">
+            <span><span class="d-inline-block rounded" style="width:12px;height:12px;background:#d1fae5;border:1px solid #6ee7b7;"></span> Engine (true)</span>
+            <span><span class="d-inline-block rounded" style="width:12px;height:12px;background:#fef3c7;border:1px solid #fcd34d;"></span> Architect (deceptive)</span>
+        </div>
+        <ol class="list-group list-group-numbered">
+            @foreach (var sentence in Model.SpectatorSentences!.Where(s => !string.IsNullOrWhiteSpace(s.Text)))
+            {
+                var isEngine = sentence.Source == "Engine";
+                var bgStyle = isEngine
+                    ? "background-color: #ecfdf5; border-left: 3px solid #34d399;"
+                    : "background-color: #fffbeb; border-left: 3px solid #fbbf24;";
+                <li class="list-group-item py-2" style="@bgStyle">
+                    @sentence.Text
+                    <span class="badge @(isEngine ? "bg-success" : "bg-warning text-dark") ms-2" style="font-size: 0.65rem;">
+                        @(isEngine ? "Engine" : "Architect")
+                    </span>
+                </li>
+            }
+        </ol>
+    </div>
+}

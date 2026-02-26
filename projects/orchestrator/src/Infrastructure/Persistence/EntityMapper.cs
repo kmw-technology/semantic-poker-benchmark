@@ -33,7 +33,7 @@ public static class EntityMapper
             CompletedAt = match.CompletedAt,
             ErrorMessage = match.ErrorMessage,
             IsInteractive = match.Config.IsInteractive,
-            HumanPlayerName = match.Config.HumanPlayerName,
+            HumanPlayerNamesJson = JsonSerializer.Serialize(match.Config.HumanPlayerNames, JsonOptions),
             Rounds = match.Rounds.Select(ToEntity).ToList()
         };
     }
@@ -55,7 +55,7 @@ public static class EntityMapper
                 LlmTimeoutSeconds = entity.LlmTimeoutSeconds,
                 LlmTemperature = entity.LlmTemperature,
                 IsInteractive = entity.IsInteractive,
-                HumanPlayerName = entity.HumanPlayerName
+                HumanPlayerNames = JsonSerializer.Deserialize<List<string>>(entity.HumanPlayerNamesJson, JsonOptions) ?? new()
             },
             Scores = JsonSerializer.Deserialize<Dictionary<string, int>>(entity.ScoresJson, JsonOptions) ?? new(),
             CreatedAt = entity.CreatedAt,
@@ -149,7 +149,12 @@ public static class EntityMapper
             Reasoning = decision.Reasoning,
             PromptTokens = decision.PromptTokens,
             CompletionTokens = decision.CompletionTokens,
-            ResponseTimeMs = decision.ResponseTimeMs
+            ResponseTimeMs = decision.ResponseTimeMs,
+            SystemPrompt = decision.SystemPrompt,
+            UserPrompt = decision.UserPrompt,
+            ParseStrategy = decision.ParseStrategy,
+            ParseSuccess = decision.ParseSuccess,
+            FinishReason = decision.FinishReason
         };
     }
 
@@ -167,7 +172,12 @@ public static class EntityMapper
             Reasoning = entity.Reasoning,
             PromptTokens = entity.PromptTokens,
             CompletionTokens = entity.CompletionTokens,
-            ResponseTimeMs = entity.ResponseTimeMs
+            ResponseTimeMs = entity.ResponseTimeMs,
+            SystemPrompt = entity.SystemPrompt,
+            UserPrompt = entity.UserPrompt,
+            ParseStrategy = entity.ParseStrategy,
+            ParseSuccess = entity.ParseSuccess,
+            FinishReason = entity.FinishReason
         };
     }
 }

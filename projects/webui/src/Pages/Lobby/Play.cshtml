@@ -15,16 +15,19 @@
     var isCancelled = Model.Match.Status == MatchStatus.Cancelled;
     var isFailed = Model.Match.Status == MatchStatus.Failed;
     var isFinished = isCompleted || isCancelled || isFailed;
-    var isHumanArchitect = Model.GameState?.IsHumanTurn == true
-        && Model.GameState.ExpectedInputType == PlayerRole.Architect;
-    var isHumanPlayer = Model.GameState?.IsHumanTurn == true
-        && Model.GameState.ExpectedInputType == PlayerRole.Player;
+    // Check if it's THIS player's turn (by matching CurrentPlayerId to our PlayerId)
+    var currentPlayerId = Model.GameState?.CurrentPlayerId;
+    var isMyTurn = Model.GameState?.IsHumanTurn == true
+        && !string.IsNullOrEmpty(Model.PlayerId)
+        && currentPlayerId == Model.PlayerId;
+    var isHumanArchitect = isMyTurn && Model.GameState?.ExpectedInputType == PlayerRole.Architect;
+    var isHumanPlayer = isMyTurn && Model.GameState?.ExpectedInputType == PlayerRole.Player;
+    var isOtherHumanTurn = Model.GameState?.IsHumanTurn == true && !isMyTurn;
     var isWaiting = !isFinished && !isHumanArchitect && !isHumanPlayer;
     var currentRound = Model.GameState?.CurrentRound ?? Model.Match.CompletedRounds;
     var totalRounds = Model.Match.TotalRounds;
     var pct = totalRounds > 0 ? (int)(100.0 * Model.Match.CompletedRounds / totalRounds) : 0;
-    // Scores/choices use "human:Name" as key, not just "Name"
-    var humanModelId = Model.Match.HumanPlayerName != null ? $"human:{Model.Match.HumanPlayerName}" : null;
+    var myPlayerId = Model.PlayerId;
 }
 
 <!-- Header -->
@@ -35,9 +38,9 @@
             <code>@Model.Match.Id.ToString()[..8]</code>
         </h1>
         <span class="badge @GetStatusBadgeClass(Model.Match.Status) fs-6">@Model.Match.Status</span>
-        @if (Model.Match.HumanPlayerName != null)
+        @if (!string.IsNullOrEmpty(myPlayerId))
         {
-            <span class="badge bg-info fs-6 ms-2"><i class="bi bi-person-fill"></i> @Model.Match.HumanPlayerName</span>
+            <span class="badge bg-info fs-6 ms-2"><i class="bi bi-person-fill"></i> @myPlayerId</span>
         }
     </div>
     <div>
@@ -94,7 +97,7 @@
                             @foreach (var kv in sortedScores)
                             {
                                 rank++;
-                                var isHuman = kv.Key == humanModelId;
+                                var isHuman = kv.Key == myPlayerId;
                                 <tr class="@(rank == 1 ? "table-warning" : "") @(isHuman ? "fw-bold" : "")">
                                     <td>
                                         @if (rank == 1) { <i class="bi bi-trophy-fill text-warning"></i> }
@@ -196,6 +199,7 @@
                     }
 
                     <form method="post" asp-page-handler="Architect" asp-route-id="@Model.MatchId">
+                        <input type="hidden" name="player" value="@myPlayerId" />
                         <div class="mb-3">
                             <label for="sentence1" class="form-label">Deceptive Sentence 1</label>
                             <input type="text" class="form-control" name="Sentence1" id="sentence1"
@@ -260,6 +264,7 @@
                     }
 
                     <form method="post" asp-page-handler="Player" asp-route-id="@Model.MatchId">
+                        <input type="hidden" name="player" value="@myPlayerId" />
                         <label class="form-label fw-bold">Choose a Door:</label>
                         <div class="row mb-3">
                             @foreach (var door in new[] { 'A', 'B', 'C', 'D', 'E' })
@@ -297,8 +302,16 @@
                     <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
                         <span class="visually-hidden">Loading...</span>
                     </div>
-                    <h4 class="text-muted">Waiting for other players...</h4>
-                    <p class="text-muted">LLM models are making their decisions. This page will update automatically.</p>
+                    @if (isOtherHumanTurn && currentPlayerId != null)
+                    {
+                        <h4 class="text-muted">Waiting for @currentPlayerId...</h4>
+                        <p class="text-muted">Another human player is making their decision. This page will update automatically.</p>
+                    }
+                    else
+                    {
+                        <h4 class="text-muted">Waiting for other players...</h4>
+                        <p class="text-muted">LLM models are making their decisions. This page will update automatically.</p>
+                    }
                 </div>
             </div>
         }
@@ -345,7 +358,7 @@
                             @foreach (var choice in result.PlayerChoices)
                             {
                                 var scoreChange = result.ScoreChanges.GetValueOrDefault(choice.Key, 0);
-                                var isHuman = choice.Key == humanModelId;
+                                var isHuman = choice.Key == myPlayerId;
                                 <tr class="@(isHuman ? "fw-bold" : "")">
                                     <td>
                                         @choice.Key
@@ -381,7 +394,7 @@
                     <tbody>
                         @foreach (var kv in Model.Match.Scores.OrderByDescending(kv => kv.Value))
                         {
-                            var isHuman = kv.Key == humanModelId;
+                            var isHuman = kv.Key == myPlayerId;
                             <tr class="@(isHuman ? "table-info" : "")">
                                 <td>
                                     @kv.Key
@@ -420,7 +433,8 @@
     <script>
         const matchId = '@Model.MatchId';
         const matchStatus = '@Model.Match.Status';
-        const isHumanTurn = @(Model.GameState?.IsHumanTurn == true ? "true" : "false");
+        const isMyTurn = @(isMyTurn ? "true" : "false");
+        const myPlayerId = '@(Model.PlayerId ?? "")';
         const apiBaseUrl = '@(ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["BenchmarkApi:BaseUrl"] ?? "http://localhost:5000")';
 
         if (matchStatus !== 'Completed' && matchStatus !== 'Cancelled' && matchStatus !== 'Failed') {
@@ -431,8 +445,8 @@
 
             connection.on('WaitingForHumanInput', function(data) {
                 console.log('Waiting for human input:', data);
-                // Only reload if it's NOT already the human's turn (avoid infinite reload loop)
-                if (!isHumanTurn) {
+                // Reload if it's not currently my turn (need to show input form or updated state)
+                if (!isMyTurn) {
                     window.location.reload();
                 }
             });
@@ -459,8 +473,8 @@
                     console.warn('SignalR failed, falling back to polling:', err);
                 });
 
-            // Fallback: poll every 8 seconds, but NOT when human is actively typing
-            if (!isHumanTurn) {
+            // Fallback: poll every 8 seconds, but NOT when this player is actively typing
+            if (!isMyTurn) {
                 setInterval(function() {
                     if (document.hidden) return;
                     window.location.reload();

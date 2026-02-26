@@ -61,10 +61,12 @@ public class PromptBuilder
             YOUR TASK:
             Write exactly 3 sentences to deceive the Players. Match the engine's rigid, formulaic style.
 
-            Respond with ONLY your 3 sentences, one per line, numbered:
-            1. [sentence]
-            2. [sentence]
-            3. [sentence]
+            CRITICAL FORMAT REQUIREMENT — respond with ONLY these 3 numbered lines, nothing else:
+            1. [Your first deceptive sentence about doors]
+            2. [Your second deceptive sentence about doors]
+            3. [Your third deceptive sentence about doors]
+
+            Do NOT include any explanation, reasoning, or preamble. Just the 3 numbered sentences.
             """;
 
         return prompt;
@@ -120,9 +122,12 @@ public class PromptBuilder
             YOUR TASK:
             Analyze the sentences, identify which you believe are true vs. deceptive, and choose a door.
 
-            Respond in this EXACT format:
+            CRITICAL FORMAT REQUIREMENT — respond in this EXACT format (2 lines only):
             REASONING: [Your analysis in 2-3 sentences]
             DOOR: [single letter A-E]
+
+            You MUST end your response with "DOOR: " followed by exactly one letter (A, B, C, D, or E).
+            Do NOT use any other format. Do NOT wrap in markdown or code blocks.
             """;
 
         return prompt;

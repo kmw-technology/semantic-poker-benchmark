@@ -1,112 +1,391 @@
 @page
 @model SemanticPoker.WebUI.Pages.Lobby.CreateModel
 @{
-    ViewData["Title"] = "Interactive Lobby";
+    ViewData["Title"] = "Game Lobby";
 }
 
-<h1><i class="bi bi-joystick"></i> Interactive Lobby</h1>
-<p class="text-muted">Play against LLM models in real-time.</p>
+@section Styles {
+<style>
+    .lobby-header {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        border-radius: 12px;
+        padding: 2rem 2.5rem;
+        margin-bottom: 1.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .lobby-header::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: repeating-linear-gradient(
+            90deg,
+            transparent,
+            transparent 60px,
+            rgba(255,255,255,0.015) 60px,
+            rgba(255,255,255,0.015) 61px
+        );
+        pointer-events: none;
+    }
+    .lobby-header h1 {
+        color: #e0e0e0;
+        font-weight: 700;
+        font-size: 1.75rem;
+        margin: 0;
+        letter-spacing: -0.02em;
+    }
+    .lobby-header p {
+        color: #8899aa;
+        margin: 0.25rem 0 0;
+        font-size: 0.95rem;
+    }
+    .lobby-header .player-count {
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 8px;
+        padding: 0.5rem 1rem;
+        color: #ccd6e0;
+        font-size: 0.85rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+    .lobby-header .player-count .count-num {
+        color: #53d769;
+        font-size: 1.1rem;
+    }
+
+    .slot-card {
+        background: #fff;
+        border: 2px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1rem 1.25rem;
+        margin-bottom: 0.75rem;
+        transition: border-color 0.2s, box-shadow 0.2s, opacity 0.3s;
+        position: relative;
+    }
+    .slot-card:hover { border-color: #cbd5e1; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .slot-card.slot-human { border-left: 4px solid #3b82f6; }
+    .slot-card.slot-llm { border-left: 4px solid #8b5cf6; }
+
+    .slot-card .slot-number {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 0.8rem;
+        flex-shrink: 0;
+    }
+    .slot-human .slot-number { background: #dbeafe; color: #2563eb; }
+    .slot-llm .slot-number { background: #ede9fe; color: #7c3aed; }
+
+    .slot-card .type-select {
+        font-weight: 600;
+        font-size: 0.85rem;
+        border-radius: 6px;
+        padding: 0.35rem 0.6rem;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        min-width: 100px;
+    }
+
+    .slot-card .slot-input {
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        padding: 0.4rem 0.75rem;
+        font-size: 0.9rem;
+        transition: border-color 0.15s;
+    }
+    .slot-card .slot-input:focus { border-color: #93c5fd; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
+
+    .slot-card .btn-remove {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        border: 1px solid #e2e8f0;
+        background: #fff;
+        color: #94a3b8;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        transition: all 0.15s;
+        flex-shrink: 0;
+    }
+    .slot-card .btn-remove:hover:not(:disabled) { background: #fef2f2; border-color: #fca5a5; color: #ef4444; }
+    .slot-card .btn-remove:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .btn-add-player {
+        border: 2px dashed #cbd5e1;
+        border-radius: 10px;
+        padding: 0.75rem;
+        background: transparent;
+        color: #64748b;
+        font-weight: 600;
+        font-size: 0.9rem;
+        width: 100%;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+    }
+    .btn-add-player:hover:not(:disabled) { border-color: #93c5fd; color: #3b82f6; background: #f0f7ff; }
+    .btn-add-player:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .settings-card {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1.25rem;
+    }
+    .settings-card h6 {
+        font-weight: 700;
+        font-size: 0.8rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #64748b;
+        margin-bottom: 0.75rem;
+    }
+    .settings-card .form-check-label { font-size: 0.9rem; }
+    .settings-card .form-check-label small { font-size: 0.78rem; }
+
+    .btn-start {
+        background: linear-gradient(135deg, #1a1a2e, #0f3460);
+        border: none;
+        color: #fff;
+        font-weight: 700;
+        font-size: 1.05rem;
+        padding: 0.85rem 2rem;
+        border-radius: 10px;
+        letter-spacing: 0.02em;
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+    }
+    .btn-start:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(15,52,96,0.35); color: #fff; }
+    .btn-start:active { transform: translateY(0); }
+
+    .model-option-params { color: #94a3b8; font-size: 0.8em; }
+    .model-option-provider { font-size: 0.75em; }
+
+    .slot-entering { animation: slideIn 0.25s ease-out; }
+    @@keyframes slideIn {
+        from { opacity: 0; transform: translateY(-8px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    .alert-lobby {
+        border-radius: 10px;
+        border-left: 4px solid #ef4444;
+        background: #fef2f2;
+        color: #991b1b;
+        font-weight: 500;
+    }
+</style>
+}
+
+<div class="lobby-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+    <div>
+        <h1><i class="bi bi-controller"></i> Game Lobby</h1>
+        <p>Assemble your players and start the match.</p>
+    </div>
+    <div class="player-count">
+        <i class="bi bi-people-fill"></i>
+        <span class="count-num" id="playerCountNum">3</span> / 8 Players
+    </div>
+</div>
 
 @if (Model.ErrorMessage != null)
 {
-    <div class="alert alert-danger">@Model.ErrorMessage</div>
+    <div class="alert alert-lobby mb-3">
+        <i class="bi bi-exclamation-circle-fill me-1"></i> @Model.ErrorMessage
+    </div>
 }
 
-<form method="post">
-    <div class="row">
-        <div class="col-md-8">
-            <div class="card mb-4">
-                <div class="card-header"><h5 class="mb-0"><i class="bi bi-robot"></i> Select LLM Opponents</h5></div>
-                <div class="card-body">
-                    @if (!Model.AvailableModels.Any())
-                    {
-                        <div class="alert alert-warning">
-                            <i class="bi bi-exclamation-triangle"></i> No models available. Ensure Ollama is running with models pulled.
-                        </div>
-                    }
-                    else
-                    {
-                        <p class="text-muted small">Select at least 2 LLM opponents to play against.</p>
-                        var modelIndex = 0;
-                        @foreach (var m in Model.AvailableModels)
-                        {
-                            var safeId = $"model-{modelIndex++}";
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="checkbox" name="SelectedModels"
-                                       value="@m.ModelId" id="@safeId"
-                                       @(Model.SelectedModels.Contains(m.ModelId) ? "checked" : "")>
-                                <label class="form-check-label" for="@safeId">
-                                    <strong>@m.DisplayName</strong>
-                                    @if (m.ParameterCount.HasValue)
-                                    {
-                                        <span class="text-muted small">(@((m.ParameterCount.Value / 1_000_000_000.0).ToString("F1"))B params)</span>
-                                    }
-                                    <span class="badge bg-info status-badge">@m.Provider</span>
-                                </label>
-                            </div>
-                        }
-                    }
-                </div>
+@if (!Model.AvailableModels.Any())
+{
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i> No LLM models available. Ensure Ollama is running with models pulled.
+    </div>
+}
+
+<form method="post" id="lobbyForm">
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div id="playerSlots">
+                @* Slots are rendered by JS on page load *@
             </div>
+            <button type="button" class="btn-add-player" id="btnAddPlayer" onclick="addSlot()">
+                <i class="bi bi-plus-lg"></i> Add Player
+            </button>
         </div>
 
-        <div class="col-md-4">
-            <div class="card mb-4">
-                <div class="card-header"><h5 class="mb-0"><i class="bi bi-person"></i> Player Settings</h5></div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label for="humanPlayerName" class="form-label">Your Name</label>
-                        <input type="text" class="form-control" name="HumanPlayerName" id="humanPlayerName"
-                               value="@Model.HumanPlayerName" placeholder="Enter your name">
-                    </div>
+        <div class="col-lg-4">
+            <div class="settings-card mb-3">
+                <h6><i class="bi bi-sliders me-1"></i> Rounds</h6>
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="radio" name="TotalRounds" value="5"
+                           id="rounds5" @(Model.TotalRounds == 5 ? "checked" : "")>
+                    <label class="form-check-label" for="rounds5">5 rounds <small class="text-muted">(Quick)</small></label>
+                </div>
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="radio" name="TotalRounds" value="10"
+                           id="rounds10" @(Model.TotalRounds == 10 ? "checked" : "")>
+                    <label class="form-check-label" for="rounds10">10 rounds <small class="text-muted">(Default)</small></label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="TotalRounds" value="25"
+                           id="rounds25" @(Model.TotalRounds == 25 ? "checked" : "")>
+                    <label class="form-check-label" for="rounds25">25 rounds <small class="text-muted">(Long)</small></label>
                 </div>
             </div>
 
-            <div class="card mb-4">
-                <div class="card-header"><h5 class="mb-0"><i class="bi bi-gear"></i> Game Settings</h5></div>
-                <div class="card-body">
-                    <div class="mb-3">
-                        <label class="form-label">Number of Rounds</label>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="TotalRounds" value="5"
-                                   id="rounds5" @(Model.TotalRounds == 5 ? "checked" : "")>
-                            <label class="form-check-label" for="rounds5">5 rounds</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="TotalRounds" value="10"
-                                   id="rounds10" @(Model.TotalRounds == 10 ? "checked" : "")>
-                            <label class="form-check-label" for="rounds10">10 rounds (Default)</label>
-                        </div>
-                        <div class="form-check">
-                            <input class="form-check-input" type="radio" name="TotalRounds" value="25"
-                                   id="rounds25" @(Model.TotalRounds == 25 ? "checked" : "")>
-                            <label class="form-check-label" for="rounds25">25 rounds</label>
-                        </div>
-                    </div>
-
-                    <div class="form-check mb-2">
-                        <input class="form-check-input" type="checkbox" name="AdaptivePlay"
-                               value="true" id="adaptivePlay" @(Model.AdaptivePlay ? "checked" : "")>
-                        <label class="form-check-label" for="adaptivePlay">
-                            Adaptive Play
-                            <small class="text-muted d-block">Models see previous round history</small>
-                        </label>
-                    </div>
-
-                    <div class="form-check mb-3">
-                        <input class="form-check-input" type="checkbox" name="RotateArchitect"
-                               value="true" id="rotateArchitect" @(Model.RotateArchitect ? "checked" : "")>
-                        <label class="form-check-label" for="rotateArchitect">
-                            Rotate Architect
-                            <small class="text-muted d-block">Round-robin architect assignment</small>
-                        </label>
-                    </div>
+            <div class="settings-card mb-3">
+                <h6><i class="bi bi-gear me-1"></i> Options</h6>
+                <div class="form-check mb-2">
+                    <input class="form-check-input" type="checkbox" name="AdaptivePlay"
+                           value="true" id="adaptivePlay" @(Model.AdaptivePlay ? "checked" : "")>
+                    <label class="form-check-label" for="adaptivePlay">
+                        Adaptive Play
+                        <small class="text-muted d-block">Models see previous round history</small>
+                    </label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="RotateArchitect"
+                           value="true" id="rotateArchitect" @(Model.RotateArchitect ? "checked" : "")>
+                    <label class="form-check-label" for="rotateArchitect">
+                        Rotate Architect
+                        <small class="text-muted d-block">Round-robin architect role</small>
+                    </label>
                 </div>
             </div>
 
-            <button type="submit" class="btn btn-primary btn-lg w-100">
-                <i class="bi bi-joystick"></i> Start Game
+            <button type="submit" class="btn-start w-100">
+                <i class="bi bi-play-fill"></i> Start Game
             </button>
         </div>
     </div>
 </form>
+
+@section Scripts {
+<script>
+    const MAX_PLAYERS = 8;
+    const MIN_PLAYERS = 3;
+
+    const availableModels = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(
+        Model.AvailableModels.Select(m => new {
+            id = m.ModelId,
+            name = m.DisplayName,
+            provider = m.Provider,
+            parameters = m.ParameterCount.HasValue
+                ? (m.ParameterCount.Value / 1000000000.0).ToString("F1") + "B"
+                : null
+        }),
+        new System.Text.Json.JsonSerializerOptions { PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase }
+    ));
+
+    const defaultFirstModel = availableModels.length > 0 ? availableModels[0].id : '';
+    const defaultSecondModel = availableModels.length > 1 ? availableModels[1].id : defaultFirstModel;
+
+    let slots = [
+        { type: 'Human', name: 'Player 1', modelId: '' },
+        { type: 'LLM', name: '', modelId: defaultFirstModel },
+        { type: 'LLM', name: '', modelId: defaultSecondModel }
+    ];
+
+    function buildModelOptions(selectedId) {
+        let html = '<option value="">-- Select Model --</option>';
+        for (const m of availableModels) {
+            const sel = m.id === selectedId ? ' selected' : '';
+            const params = m.parameters ? ` (${m.parameters})` : '';
+            html += `<option value="${m.id}"${sel}>${m.name}${params} [${m.provider}]</option>`;
+        }
+        return html;
+    }
+
+    function renderSlots() {
+        const container = document.getElementById('playerSlots');
+        container.innerHTML = '';
+
+        slots.forEach((slot, i) => {
+            const isHuman = slot.type === 'Human';
+            const typeClass = isHuman ? 'slot-human' : 'slot-llm';
+            const icon = isHuman ? 'bi-person-fill' : 'bi-cpu';
+
+            const configField = isHuman
+                ? `<input type="text" class="form-control slot-input" name="Players[${i}].Name"
+                     value="${escapeHtml(slot.name)}" placeholder="Player name"
+                     oninput="slots[${i}].name=this.value" required>`
+                : `<select class="form-select slot-input" name="Players[${i}].ModelId"
+                     onchange="slots[${i}].modelId=this.value" required>${buildModelOptions(slot.modelId)}</select>`;
+
+            const card = document.createElement('div');
+            card.className = `slot-card ${typeClass} slot-entering`;
+            card.innerHTML = `
+                <div class="d-flex align-items-center gap-2">
+                    <div class="slot-number"><i class="bi ${icon}"></i></div>
+                    <select class="type-select" name="Players[${i}].Type" onchange="changeType(${i}, this.value)">
+                        <option value="Human"${isHuman ? ' selected' : ''}>Human</option>
+                        <option value="LLM"${!isHuman ? ' selected' : ''}>LLM</option>
+                    </select>
+                    <div class="flex-grow-1">${configField}</div>
+                    <button type="button" class="btn-remove" onclick="removeSlot(${i})" ${slots.length <= MIN_PLAYERS ? 'disabled' : ''} title="Remove player">
+                        <i class="bi bi-x-lg" style="font-size:0.8rem"></i>
+                    </button>
+                </div>`;
+
+            container.appendChild(card);
+        });
+
+        updateCount();
+    }
+
+    function changeType(index, newType) {
+        slots[index].type = newType;
+        if (newType === 'Human') {
+            slots[index].name = slots[index].name || `Player ${index + 1}`;
+            slots[index].modelId = '';
+        } else {
+            slots[index].name = '';
+            slots[index].modelId = slots[index].modelId || (availableModels.length > 0 ? availableModels[0].id : '');
+        }
+        renderSlots();
+    }
+
+    function addSlot() {
+        if (slots.length >= MAX_PLAYERS) return;
+        slots.push({
+            type: 'LLM',
+            name: '',
+            modelId: availableModels.length > 0 ? availableModels[0].id : ''
+        });
+        renderSlots();
+    }
+
+    function removeSlot(index) {
+        if (slots.length <= MIN_PLAYERS) return;
+        slots.splice(index, 1);
+        renderSlots();
+    }
+
+    function updateCount() {
+        document.getElementById('playerCountNum').textContent = slots.length;
+        document.getElementById('btnAddPlayer').disabled = slots.length >= MAX_PLAYERS;
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Initial render
+    renderSlots();
+</script>
+}

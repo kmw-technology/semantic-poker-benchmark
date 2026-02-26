@@ -154,10 +154,10 @@ semantic-poker-benchmark/
 │   ├── orchestrator/src/           # REST API (Port 5000)
 │   │   ├── Controllers/            # 5 Controller (Matches, Models, Leaderboard, Health, Debug)
 │   │   ├── Hubs/                   # SignalR MatchProgressHub
-│   │   ├── Infrastructure/         # EF Core (SQLite), OllamaAdapter
-│   │   └── Services/               # MatchRunner, PromptBuilder, ResponseParser, etc.
+│   │   ├── Infrastructure/         # EF Core (SQLite), LlmAdapters (Ollama, OpenAI, Composite)
+│   │   └── Services/               # MatchRunner, PromptBuilder, ResponseParser, HumanInputCoordinator
 │   └── webui/src/                  # Razor Pages UI (Port 5010)
-│       ├── Pages/                  # 8 Seiten (Dashboard, Matches, Leaderboard, Analysis, Debug)
+│       ├── Pages/                  # 11 Seiten (Dashboard, Matches, Leaderboard, Analysis, Debug, Lobby, Spectate)
 │       └── Services/               # BenchmarkApiClient (HTTP → API)
 ├── tests/                          # E2E Tests
 ├── deployment/                     # docker-compose.yml, Dockerfiles, .env.example
@@ -179,11 +179,12 @@ semantic-poker-benchmark/
 | Backend API | ASP.NET Core 8 (C#), REST Controllers, Swagger/OpenAPI |
 | Web UI | ASP.NET Core 8 Razor Pages, Bootstrap 5, Chart.js |
 | Datenbank | SQLite via EF Core (`benchmark.db`) |
-| LLM Server | Ollama (Docker, GPU), OpenAI-kompatible API |
+| LLM Providers | Ollama (lokal/Docker) + OpenAI API (Cloud), via CompositeAdapter |
 | Echtzeit | SignalR (`/hubs/match-progress`) |
 | CI/CD | GitHub Actions |
 | Container | Docker Compose (Ollama + API + WebUI) |
-| Modelle | phi3.5, deepseek-r1:1.5b, llama3.2:3b |
+| Modelle (Ollama) | phi3.5, deepseek-r1:1.5b, llama3.2:3b |
+| Modelle (OpenAI) | gpt-5-mini, gpt-5-nano (jeweils mit reasoning effort low/medium/high) |
 
 ---
 
@@ -197,7 +198,7 @@ semantic-poker-benchmark/
 ### 2. Modulare Architektur (4 Projekte + 5 Tests)
 - **shared** (`projects/shared/src/`): DTOs, Interfaces, Enums, Models — KEINE Abhängigkeiten
 - **game-engine** (`projects/game-engine/src/`): StateGenerator, 13 Templates, ScoreCalculator → nur Shared
-- **orchestrator** (`projects/orchestrator/src/`): REST API, EF Core, Ollama, Match-Runner → Shared + GameEngine
+- **orchestrator** (`projects/orchestrator/src/`): REST API, EF Core, LLM Adapters (Ollama+OpenAI), Match-Runner → Shared + GameEngine
 - **webui** (`projects/webui/src/`): Razor Pages, BenchmarkApiClient → NUR Shared (HTTP zu API)
 
 ### MODUL-ABHÄNGIGKEITS-REGELN (KRITISCH!)

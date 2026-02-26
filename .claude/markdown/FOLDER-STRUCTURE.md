@@ -15,7 +15,12 @@ semantic-poker-benchmark/
 ├── projects/                       # Source Code aller Projekte/Module
 │   ├── game-engine/                # Core Game Engine (State, Sentences, Scoring)
 │   ├── orchestrator/               # LLM API Orchestration & Match Runner
-│   └── shared/                     # Gemeinsamer Code
+│   │   └── src/Infrastructure/LlmAdapters/  # OllamaAdapter, OpenAiAdapter, CompositeAdapter
+│   ├── shared/                     # Gemeinsamer Code
+│   └── webui/                      # Razor Pages UI
+│       └── src/Pages/
+│           ├── Lobby/              # Create (Spieler-Slots), Play (Echtzeit-Spiel)
+│           └── Spectate/           # Index (Live-Games), Watch (Zuschauen)
 │
 ├── tests/                          # Cross-Projekt Tests (E2E, Performance)
 ├── deployment/                     # Deployment-Konfiguration (Docker, K8s, Terraform, Scripts)

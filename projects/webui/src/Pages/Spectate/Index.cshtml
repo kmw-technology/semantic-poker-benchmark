@@ -1,0 +1,194 @@
+@page
+@model SemanticPoker.WebUI.Pages.Spectate.IndexModel
+@{
+    ViewData["Title"] = "Live Games";
+}
+
+@section Styles {
+<style>
+    .live-header {
+        background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+        border-radius: 12px;
+        padding: 1.75rem 2rem;
+        margin-bottom: 1.5rem;
+    }
+    .live-header h1 { color: #e2e8f0; font-weight: 700; margin: 0; }
+    .live-header p { color: #64748b; margin: 0.25rem 0 0; }
+    .live-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        background: #ef4444;
+        border-radius: 50%;
+        margin-right: 0.4rem;
+        animation: pulse-dot 1.5s infinite;
+    }
+    @@keyframes pulse-dot {
+        0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239,68,68,0.5); }
+        50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+    }
+
+    .match-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        padding: 1.25rem;
+        margin-bottom: 0.75rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: #fff;
+    }
+    .match-card:hover { border-color: #93c5fd; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+
+    .player-tag {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        margin: 0.15rem 0.15rem 0.15rem 0;
+    }
+    .player-tag-human { background: #dbeafe; color: #1d4ed8; }
+    .player-tag-llm { background: #f3e8ff; color: #7c3aed; }
+
+    .btn-watch {
+        background: #0f172a;
+        color: #fff;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 0.5rem 1.25rem;
+        transition: all 0.15s;
+    }
+    .btn-watch:hover { background: #1e40af; color: #fff; transform: translateY(-1px); }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem;
+        color: #94a3b8;
+    }
+    .empty-state i { font-size: 3rem; display: block; margin-bottom: 0.75rem; }
+</style>
+}
+
+<div class="live-header d-flex align-items-center justify-content-between">
+    <div>
+        <h1><i class="bi bi-broadcast me-2"></i>Live Games</h1>
+        <p>Watch interactive matches in real-time.</p>
+    </div>
+    @if (Model.LiveMatches.Any())
+    {
+        <span class="text-white" style="font-size:0.9rem;">
+            <span class="live-dot"></span> @Model.LiveMatches.Count active
+        </span>
+    }
+</div>
+
+@if (Model.LiveMatches.Any())
+{
+    @foreach (var match in Model.LiveMatches)
+    {
+        var pct = match.TotalRounds > 0 ? (int)(100.0 * match.CompletedRounds / match.TotalRounds) : 0;
+        var humanNames = match.HumanPlayerNames;
+        var llmModels = match.ModelIds.Where(m => !m.StartsWith("human:")).ToList();
+
+        <div class="match-card">
+            <div class="d-flex align-items-start justify-content-between">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <span class="live-dot"></span>
+                        <span class="badge @GetStatusBadgeClass(match.Status)">@match.Status</span>
+                        <code class="text-muted">@match.Id.ToString()[..8]</code>
+                        <span class="text-muted small">
+                            Round @match.CompletedRounds / @match.TotalRounds
+                        </span>
+                    </div>
+
+                    <div class="mb-2">
+                        @foreach (var name in humanNames)
+                        {
+                            <span class="player-tag player-tag-human">
+                                <i class="bi bi-person-fill"></i> @name
+                            </span>
+                        }
+                        @foreach (var model in llmModels)
+                        {
+                            <span class="player-tag player-tag-llm">
+                                <i class="bi bi-cpu"></i> @(model)
+                            </span>
+                        }
+                    </div>
+
+                    <div class="progress" style="height: 6px; max-width: 300px;">
+                        <div class="progress-bar bg-primary" style="width: @pct%"></div>
+                    </div>
+                </div>
+
+                <a asp-page="/Spectate/Watch" asp-route-id="@match.Id" class="btn-watch ms-3">
+                    <i class="bi bi-eye-fill me-1"></i> Watch
+                </a>
+            </div>
+        </div>
+    }
+}
+else
+{
+    <div class="empty-state">
+        <i class="bi bi-broadcast"></i>
+        <h5>No live games right now</h5>
+        <p>Create one from the <a asp-page="/Lobby/Create">Interactive Lobby</a>.</p>
+    </div>
+}
+
+@if (Model.RecentMatches.Any())
+{
+    <h5 class="mt-4 mb-3 text-muted"><i class="bi bi-clock-history me-1"></i> Recently Finished</h5>
+    @foreach (var match in Model.RecentMatches)
+    {
+        var humanNames = match.HumanPlayerNames;
+        var winner = match.Scores.OrderByDescending(kv => kv.Value).FirstOrDefault();
+
+        <div class="match-card" style="opacity: 0.75;">
+            <div class="d-flex align-items-center justify-content-between">
+                <div>
+                    <span class="badge bg-success">Completed</span>
+                    <code class="text-muted ms-1">@match.Id.ToString()[..8]</code>
+                    <span class="text-muted small ms-2">@match.CompletedRounds rounds</span>
+                    @foreach (var name in humanNames)
+                    {
+                        <span class="player-tag player-tag-human ms-1">
+                            <i class="bi bi-person-fill"></i> @name
+                        </span>
+                    }
+                    @if (winner.Key != null)
+                    {
+                        <span class="ms-2 small">
+                            <i class="bi bi-trophy-fill text-warning"></i> @winner.Key (@(winner.Value > 0 ? "+" : "")@winner.Value)
+                        </span>
+                    }
+                </div>
+                <a asp-page="/Spectate/Watch" asp-route-id="@match.Id" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-eye"></i> Review
+                </a>
+            </div>
+        </div>
+    }
+}
+
+@section Scripts {
+<script>
+    // Auto-refresh every 10 seconds to discover new matches
+    setTimeout(function() {
+        if (!document.hidden) window.location.reload();
+    }, 10000);
+</script>
+}
+
+@functions {
+    string GetStatusBadgeClass(MatchStatus status) => status switch
+    {
+        MatchStatus.Pending => "bg-secondary",
+        MatchStatus.Running => "bg-primary",
+        MatchStatus.WaitingForHumanInput => "bg-info",
+        MatchStatus.Completed => "bg-success",
+        _ => "bg-secondary"
+    };
+}

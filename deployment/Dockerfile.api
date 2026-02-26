@@ -17,7 +17,7 @@ COPY projects/orchestrator/src/ projects/orchestrator/src/
 
 # Build and publish
 RUN dotnet publish projects/orchestrator/src/SemanticPoker.Api.csproj \
-    -c Release -o /app/publish --no-restore
+    -c Release -o /app/publish
 
 # Runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime

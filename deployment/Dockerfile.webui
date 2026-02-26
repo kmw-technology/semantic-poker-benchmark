@@ -14,7 +14,7 @@ COPY projects/webui/src/ projects/webui/src/
 
 # Build and publish
 RUN dotnet publish projects/webui/src/SemanticPoker.WebUI.csproj \
-    -c Release -o /app/publish --no-restore
+    -c Release -o /app/publish
 
 # Runtime image
 FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime

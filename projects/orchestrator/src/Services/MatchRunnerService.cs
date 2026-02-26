@@ -99,7 +99,6 @@ public class MatchRunnerService
                     roundNum, match.Config.TotalRounds, matchId);
 
                 var round = await RunRoundAsync(match, roundNum, ct);
-                match.Rounds.Add(round);
 
                 // Update scores
                 if (round.Result != null)
@@ -163,6 +162,7 @@ public class MatchRunnerService
             Phase = RoundPhase.NotStarted,
             StartedAt = DateTime.UtcNow
         };
+        match.Rounds.Add(round);
 
         // Phase 1: Generate state
         var seed = match.Config.RandomSeed.HasValue
@@ -214,13 +214,14 @@ public class MatchRunnerService
                 MatchId = match.Id,
                 RoundNumber = roundNumber,
                 HumanRole = "Architect",
+                PlayerId = architectModelId,
                 TreasureDoor = round.GameState.TreasureDoor.Label,
                 TrapDoor = round.GameState.TrapDoor.Label,
                 EngineSentences = round.EngineSentences.Select(s => s.Text).ToList()
             }, ct);
 
             // Wait for human input
-            var humanInput = await _humanInput.WaitForHumanInputAsync(match.Id, new HumanInputRequest
+            var humanInput = await _humanInput.WaitForHumanInputAsync(match.Id, architectModelId, new HumanInputRequest
             {
                 InputType = PlayerRole.Architect,
                 RoundNumber = roundNumber,
@@ -268,9 +269,15 @@ public class MatchRunnerService
             var architectResponse = await _llmAdapter.SendPromptAsync(
                 architectModelId, architectSystemPrompt, architectUserPrompt, llmOptions, ct);
 
-            round.ArchitectSentences = _responseParser.ParseArchitectSentences(architectResponse.Content);
+            var parseResult = _responseParser.ParseArchitectSentencesWithMeta(architectResponse.Content);
+            round.ArchitectSentences = parseResult.Sentences;
 
-            // Store architect decision for tracking
+            _logger.LogInformation("Round {Round}: Architect {Model} parse: strategy={Strategy}, success={Success}, sentences={Count}, responseTime={Time}ms, tokens={Prompt}+{Completion}",
+                roundNumber, architectModelId, parseResult.Strategy, parseResult.Success,
+                parseResult.Sentences.Count, architectResponse.ResponseTimeMs,
+                architectResponse.PromptTokens, architectResponse.CompletionTokens);
+
+            // Store architect decision with full trace data
             round.PlayerDecisions.Add(new PlayerDecision
             {
                 ModelId = architectModelId,
@@ -279,19 +286,35 @@ public class MatchRunnerService
                 RawResponse = architectResponse.Content,
                 PromptTokens = architectResponse.PromptTokens,
                 CompletionTokens = architectResponse.CompletionTokens,
-                ResponseTimeMs = architectResponse.ResponseTimeMs
+                ResponseTimeMs = architectResponse.ResponseTimeMs,
+                SystemPrompt = architectSystemPrompt,
+                UserPrompt = architectUserPrompt,
+                ParseStrategy = parseResult.Strategy,
+                ParseSuccess = parseResult.Success,
+                FinishReason = architectResponse.FinishReason
             });
         }
 
         round.Phase = RoundPhase.ArchitectSentencesGenerated;
 
-        _logger.LogDebug("Round {Round}: Architect {Model} wrote {Count} sentences",
-            roundNumber, architectModelId, round.ArchitectSentences.Count);
+        _logger.LogInformation("Round {Round}: Architect {Model} wrote {Count} sentences: {Sentences}",
+            roundNumber, architectModelId, round.ArchitectSentences.Count,
+            string.Join(" | ", round.ArchitectSentences.Select(s => s.Text)));
 
         // Phase 4: Shuffle sentences
         round.ShuffledSentences = _sentenceEngine.ShuffleSentences(
             round.EngineSentences, round.ArchitectSentences, seed);
         round.Phase = RoundPhase.SentencesShuffled;
+
+        // Persist for spectators: doors + sentences are now visible
+        await _repository.UpdateAsync(match, ct);
+
+        await _hubContext.Clients.Group(match.Id.ToString()).SendAsync("PlayersDeciding", new
+        {
+            MatchId = match.Id,
+            RoundNumber = roundNumber,
+            ArchitectModelId = architectModelId
+        }, ct);
 
         // Phase 5: Player decisions
         round.Phase = RoundPhase.PlayersDeciding;
@@ -315,11 +338,12 @@ public class MatchRunnerService
                     MatchId = match.Id,
                     RoundNumber = roundNumber,
                     HumanRole = "Player",
+                    PlayerId = playerModelId,
                     ShuffledSentences = round.ShuffledSentences.Select((s, i) => new { Index = i + 1, s.Text }).ToList()
                 }, ct);
 
                 // Wait for human input
-                var humanInput = await _humanInput.WaitForHumanInputAsync(match.Id, new HumanInputRequest
+                var humanInput = await _humanInput.WaitForHumanInputAsync(match.Id, playerModelId, new HumanInputRequest
                 {
                     InputType = PlayerRole.Player,
                     RoundNumber = roundNumber,
@@ -366,25 +390,32 @@ public class MatchRunnerService
                 var playerResponse = await _llmAdapter.SendPromptAsync(
                     playerModelId, playerSystemPrompt, playerUserPrompt, llmOptions, ct);
 
-                var (chosenDoor, reasoning) = _responseParser.ParsePlayerResponse(playerResponse.Content);
+                var parseResult = _responseParser.ParsePlayerResponseWithMeta(playerResponse.Content);
 
-                var doorType = round.GameState.Doors.FirstOrDefault(d => d.Label == chosenDoor)?.Type ?? DoorType.Empty;
+                var doorType = round.GameState.Doors.FirstOrDefault(d => d.Label == parseResult.Door)?.Type ?? DoorType.Empty;
 
                 round.PlayerDecisions.Add(new PlayerDecision
                 {
                     ModelId = playerModelId,
                     Role = PlayerRole.Player,
-                    ChosenDoor = chosenDoor,
+                    ChosenDoor = parseResult.Door,
                     DoorOutcome = doorType,
                     RawResponse = playerResponse.Content,
-                    Reasoning = reasoning,
+                    Reasoning = parseResult.Reasoning,
                     PromptTokens = playerResponse.PromptTokens,
                     CompletionTokens = playerResponse.CompletionTokens,
-                    ResponseTimeMs = playerResponse.ResponseTimeMs
+                    ResponseTimeMs = playerResponse.ResponseTimeMs,
+                    SystemPrompt = playerSystemPrompt,
+                    UserPrompt = playerUserPrompt,
+                    ParseStrategy = parseResult.Strategy,
+                    ParseSuccess = parseResult.Success,
+                    FinishReason = playerResponse.FinishReason
                 });
 
-                _logger.LogDebug("Round {Round}: Player {Model} chose Door {Door} ({Outcome})",
-                    roundNumber, playerModelId, chosenDoor, doorType);
+                _logger.LogInformation("Round {Round}: Player {Model} chose Door {Door} ({Outcome}), parse: strategy={Strategy}, success={Success}, time={Time}ms, tokens={Prompt}+{Completion}",
+                    roundNumber, playerModelId, parseResult.Door, doorType,
+                    parseResult.Strategy, parseResult.Success,
+                    playerResponse.ResponseTimeMs, playerResponse.PromptTokens, playerResponse.CompletionTokens);
             }
         }
 

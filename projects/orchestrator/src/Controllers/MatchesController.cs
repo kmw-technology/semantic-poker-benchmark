@@ -125,7 +125,6 @@ public class MatchesController : ControllerBase
                 IsTruthful = s.IsTruthful
             }).ToList(),
             PlayerDecisions = round.PlayerDecisions
-                .Where(d => d.Role == PlayerRole.Player)
                 .Select(d => new PlayerDecisionDto
                 {
                     ModelId = d.ModelId,
@@ -134,7 +133,15 @@ public class MatchesController : ControllerBase
                     DoorOutcome = d.DoorOutcome,
                     ScoreChange = d.ScoreChange,
                     Reasoning = d.Reasoning,
-                    ResponseTimeMs = d.ResponseTimeMs
+                    ResponseTimeMs = d.ResponseTimeMs,
+                    RawResponse = d.RawResponse,
+                    PromptTokens = d.PromptTokens,
+                    CompletionTokens = d.CompletionTokens,
+                    SystemPrompt = d.SystemPrompt,
+                    UserPrompt = d.UserPrompt,
+                    ParseStrategy = d.ParseStrategy,
+                    ParseSuccess = d.ParseSuccess,
+                    FinishReason = d.FinishReason
                 }).ToList(),
             PlayerChoices = round.PlayerDecisions
                 .Where(d => d.Role == PlayerRole.Player)
@@ -223,7 +230,7 @@ public class MatchesController : ControllerBase
             CompletedAt = match.CompletedAt,
             ErrorMessage = match.ErrorMessage,
             IsInteractive = match.Config.IsInteractive,
-            HumanPlayerName = match.Config.HumanPlayerName
+            HumanPlayerNames = match.Config.HumanPlayerNames
         };
     }
 
@@ -247,12 +254,36 @@ public class MatchesController : ControllerBase
     public async Task<IActionResult> CreateInteractive(
         [FromBody] CreateInteractiveMatchRequest request, CancellationToken ct)
     {
-        if (request.ModelIds == null || request.ModelIds.Count < 2)
-            return BadRequest(new { Error = "At least 2 LLM models are required for interactive mode." });
+        if (request.Players == null || request.Players.Count < 3)
+            return BadRequest(new { Error = "At least 3 players are required." });
 
-        var humanModelId = $"human:{request.HumanPlayerName ?? "Human"}";
-        var allModelIds = new List<string> { humanModelId };
-        allModelIds.AddRange(request.ModelIds);
+        var llmPlayers = request.Players.Where(p => p.Type == "LLM").ToList();
+        var humanPlayers = request.Players.Where(p => p.Type == "Human").ToList();
+
+        if (llmPlayers.Count == 0)
+            return BadRequest(new { Error = "At least 1 LLM player is required." });
+
+        if (llmPlayers.Any(p => string.IsNullOrWhiteSpace(p.ModelId)))
+            return BadRequest(new { Error = "All LLM players must have a model selected." });
+
+        if (humanPlayers.Any(p => string.IsNullOrWhiteSpace(p.Name)))
+            return BadRequest(new { Error = "All human players must have a name." });
+
+        var humanNames = humanPlayers.Select(p => p.Name!.Trim()).ToList();
+        if (humanNames.Distinct(StringComparer.OrdinalIgnoreCase).Count() != humanNames.Count)
+            return BadRequest(new { Error = "Human player names must be unique." });
+
+        // Build ModelIds list: human slots → "human:{name}", LLM slots → modelId
+        // Deduplicate: if the same model appears multiple times, append #2, #3, etc.
+        var idCounts = new Dictionary<string, int>();
+        var allModelIds = new List<string>();
+        foreach (var p in request.Players)
+        {
+            var rawId = p.Type == "Human" ? $"human:{p.Name!.Trim()}" : p.ModelId!;
+            idCounts.TryGetValue(rawId, out var count);
+            idCounts[rawId] = count + 1;
+            allModelIds.Add(count == 0 ? rawId : $"{rawId}#{count + 1}");
+        }
 
         var match = new Match
         {
@@ -269,7 +300,7 @@ public class MatchesController : ControllerBase
                 LlmTimeoutSeconds = request.LlmTimeoutSeconds ?? 120,
                 LlmTemperature = request.LlmTemperature ?? 0.7,
                 IsInteractive = true,
-                HumanPlayerName = request.HumanPlayerName ?? "Human"
+                HumanPlayerNames = humanNames
             },
             CreatedAt = DateTime.UtcNow
         };
@@ -291,6 +322,10 @@ public class MatchesController : ControllerBase
         var completedRounds = match.Rounds.Where(r => r.Phase == RoundPhase.Completed).ToList();
         var lastRound = completedRounds.OrderByDescending(r => r.RoundNumber).FirstOrDefault();
 
+        // Find in-progress round for spectator data
+        var inProgressRound = match.Rounds
+            .FirstOrDefault(r => r.Phase != RoundPhase.Completed);
+
         var response = new InteractiveMatchStateResponse
         {
             MatchId = match.Id,
@@ -301,11 +336,34 @@ public class MatchesController : ControllerBase
             IsHumanTurn = waitingContext != null,
             HumanRole = waitingContext?.HumanRole,
             ExpectedInputType = waitingContext?.InputType,
+            CurrentPlayerId = waitingContext?.PlayerId,
             TreasureDoor = waitingContext?.TreasureDoor,
             TrapDoor = waitingContext?.TrapDoor,
             EngineSentences = waitingContext?.EngineSentences,
             ShuffledSentences = waitingContext?.ShuffledSentences
         };
+
+        // Populate spectator context from in-progress round
+        if (inProgressRound != null)
+        {
+            response.CurrentArchitectId = inProgressRound.ArchitectModelId;
+            response.CurrentRoundPhase = inProgressRound.Phase.ToString();
+
+            if (inProgressRound.Phase >= RoundPhase.SentencesShuffled
+                && inProgressRound.ShuffledSentences?.Any() == true)
+            {
+                response.SpectatorSentences = inProgressRound.ShuffledSentences
+                    .Select((s, i) => new ShuffledSentenceDto
+                    {
+                        Index = i + 1,
+                        Text = s.Text,
+                        Source = s.Source.ToString()
+                    })
+                    .ToList();
+                response.SpectatorTreasureDoor = inProgressRound.GameState.TreasureDoor.Label;
+                response.SpectatorTrapDoor = inProgressRound.GameState.TrapDoor.Label;
+            }
+        }
 
         if (lastRound != null)
         {
@@ -320,7 +378,13 @@ public class MatchesController : ControllerBase
                 TreasureDoor = lastRound.GameState.TreasureDoor.Label,
                 TrapDoor = lastRound.GameState.TrapDoor.Label,
                 PlayerChoices = playerDecisions.ToDictionary(d => d.ModelId, d => d.ChosenDoor),
-                ScoreChanges = lastRound.PlayerDecisions.ToDictionary(d => d.ModelId, d => d.ScoreChange)
+                ScoreChanges = lastRound.PlayerDecisions.ToDictionary(d => d.ModelId, d => d.ScoreChange),
+                Sentences = lastRound.ShuffledSentences?.Select((s, i) => new ShuffledSentenceDto
+                {
+                    Index = i + 1,
+                    Text = s.Text,
+                    Source = s.Source.ToString()
+                }).ToList() ?? new()
             };
         }
 
@@ -329,14 +393,22 @@ public class MatchesController : ControllerBase
 
     [HttpPost("{id:guid}/human-input")]
     public async Task<IActionResult> SubmitHumanInput(
-        Guid id, [FromBody] SubmitHumanInputRequest request, CancellationToken ct)
+        Guid id, [FromQuery] string playerId, [FromBody] SubmitHumanInputRequest request, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(playerId))
+            return BadRequest(new { Error = "playerId query parameter is required." });
+
         var match = await _repository.GetByIdAsync(id, ct);
         if (match == null)
             return NotFound();
 
         if (match.Status != MatchStatus.WaitingForHumanInput)
             return Conflict(new { Error = "Match is not waiting for human input." });
+
+        // Validate that the playerId matches the currently waiting player
+        var waitingContext = _humanInput.GetWaitingContext(id);
+        if (waitingContext?.PlayerId != playerId)
+            return Conflict(new { Error = $"Match is not waiting for player '{playerId}'." });
 
         // Validate based on input type
         if (request.InputType == PlayerRole.Architect)
@@ -360,7 +432,7 @@ public class MatchesController : ControllerBase
             Reasoning = request.Reasoning
         };
 
-        var accepted = _humanInput.SubmitInput(id, humanInput);
+        var accepted = _humanInput.SubmitInput(id, playerId, humanInput);
         if (!accepted)
             return Conflict(new { Error = "No pending input request for this match." });
 

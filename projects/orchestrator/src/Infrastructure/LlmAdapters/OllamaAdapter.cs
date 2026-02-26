@@ -36,6 +36,10 @@ public class OllamaAdapter : ILlmAdapter
         CancellationToken ct = default)
     {
         options ??= new LlmRequestOptions();
+        // Strip dedup suffix like "#2", "#3" appended for duplicate model IDs
+        var hashIndex = modelId.IndexOf('#');
+        if (hashIndex >= 0)
+            modelId = modelId[..hashIndex];
         var client = _httpClientFactory.CreateClient("Ollama");
         var sw = Stopwatch.StartNew();
 

@@ -11,5 +11,5 @@ public class MatchConfig
     public int LlmTimeoutSeconds { get; set; } = 120;
     public double LlmTemperature { get; set; } = 0.7;
     public bool IsInteractive { get; set; } = false;
-    public string? HumanPlayerName { get; set; }
+    public List<string> HumanPlayerNames { get; set; } = new();
 }

@@ -13,6 +13,7 @@ public class InteractiveMatchStateResponse
     public PlayerRole? HumanRole { get; set; }
     public bool IsHumanTurn { get; set; }
     public PlayerRole? ExpectedInputType { get; set; }
+    public string? CurrentPlayerId { get; set; }
 
     // Architect context (shown when human is Architect)
     public char? TreasureDoor { get; set; }
@@ -22,6 +23,13 @@ public class InteractiveMatchStateResponse
     // Player context (shown when human is Player)
     public List<ShuffledSentenceDto>? ShuffledSentences { get; set; }
 
+    // Spectator context (live round data visible during active rounds)
+    public string? CurrentArchitectId { get; set; }
+    public string? CurrentRoundPhase { get; set; }
+    public List<ShuffledSentenceDto>? SpectatorSentences { get; set; }
+    public char? SpectatorTreasureDoor { get; set; }
+    public char? SpectatorTrapDoor { get; set; }
+
     // Last completed round result
     public RoundResultSummary? LastRoundResult { get; set; }
 }
@@ -30,6 +38,7 @@ public class ShuffledSentenceDto
 {
     public int Index { get; set; }
     public string Text { get; set; } = string.Empty;
+    public string? Source { get; set; }  // "Engine" or "Architect" — for spectator view
 }
 
 public class RoundResultSummary
@@ -40,4 +49,5 @@ public class RoundResultSummary
     public Dictionary<string, int> ScoreChanges { get; set; } = new();
     public char TreasureDoor { get; set; }
     public char TrapDoor { get; set; }
+    public List<ShuffledSentenceDto> Sentences { get; set; } = new();
 }

@@ -1,0 +1,419 @@
+@page "{id:guid}"
+@model SemanticPoker.WebUI.Pages.Replay.IndexModel
+@{
+    ViewData["Title"] = $"Replay — Round {Model.CurrentRound}";
+    var prevRound = Model.CurrentRound - 1;
+    var nextRound = Model.CurrentRound + 1;
+    var hasPrev = Model.CurrentRound > 1;
+    var hasNext = Model.CurrentRound < Model.CompletedRounds;
+    var progressPct = (int)(100.0 * Model.CurrentRound / Model.CompletedRounds);
+}
+
+@section Styles {
+<style>
+    .replay-nav {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        border-radius: 12px;
+        padding: 1rem 1.5rem;
+        color: #e2e8f0;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .replay-nav .round-label {
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        font-size: 1.1rem;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+        color: #f8fafc;
+    }
+    .replay-nav .round-of {
+        color: #94a3b8;
+        font-weight: 400;
+    }
+    .replay-nav .btn-nav {
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        color: #e2e8f0;
+        padding: 0.4rem 1rem;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .replay-nav .btn-nav:hover:not(:disabled) {
+        background: rgba(255,255,255,0.18);
+        color: #fff;
+        transform: translateY(-1px);
+    }
+    .replay-nav .btn-nav:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+    .replay-progress {
+        height: 4px;
+        background: rgba(255,255,255,0.1);
+        border-radius: 2px;
+        overflow: hidden;
+        margin-top: 0.75rem;
+    }
+    .replay-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #6366f1, #8b5cf6);
+        border-radius: 2px;
+        transition: width 0.4s ease;
+    }
+    .round-select {
+        background: rgba(255,255,255,0.08);
+        border: 1px solid rgba(255,255,255,0.15);
+        color: #e2e8f0;
+        border-radius: 6px;
+        padding: 0.3rem 0.5rem;
+        font-size: 0.9rem;
+        cursor: pointer;
+    }
+    .round-select option {
+        background: #1e293b;
+        color: #e2e8f0;
+    }
+    .architect-banner {
+        background: linear-gradient(135deg, #312e81, #4338ca);
+        color: #e0e7ff;
+        border-radius: 10px;
+        padding: 0.75rem 1.25rem;
+        font-weight: 600;
+    }
+    .architect-banner .architect-name {
+        color: #a5b4fc;
+    }
+    .keyboard-hint {
+        font-size: 0.75rem;
+        color: #64748b;
+    }
+    .keyboard-hint kbd {
+        background: rgba(255,255,255,0.1);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 4px;
+        padding: 0.1rem 0.4rem;
+        font-size: 0.7rem;
+        color: #94a3b8;
+    }
+</style>
+}
+
+<!-- Navigation Bar -->
+<div class="replay-nav mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <a asp-page="/Matches/Detail" asp-route-id="@Model.Match.Id" class="btn-nav text-decoration-none">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <div>
+                <span class="round-label">
+                    <i class="bi bi-play-circle me-1"></i>
+                    Replay
+                    <code class="text-info">@Model.Match.Id.ToString()[..8]</code>
+                </span>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            @if (hasPrev)
+            {
+                <a asp-page="/Replay/Index" asp-route-id="@Model.Match.Id" asp-route-round="@prevRound"
+                   class="btn-nav text-decoration-none" id="btnPrev">
+                    <i class="bi bi-chevron-left"></i> Prev
+                </a>
+            }
+            else
+            {
+                <button class="btn-nav" disabled><i class="bi bi-chevron-left"></i> Prev</button>
+            }
+
+            <select class="round-select" id="roundSelect"
+                    onchange="window.location.href='?round=' + this.value">
+                @for (int i = 1; i <= Model.CompletedRounds; i++)
+                {
+                    <option value="@i" selected="@(i == Model.CurrentRound)">Round @i</option>
+                }
+            </select>
+
+            <span class="round-of">of @Model.CompletedRounds</span>
+
+            @if (hasNext)
+            {
+                <a asp-page="/Replay/Index" asp-route-id="@Model.Match.Id" asp-route-round="@nextRound"
+                   class="btn-nav text-decoration-none" id="btnNext">
+                    Next <i class="bi bi-chevron-right"></i>
+                </a>
+            }
+            else
+            {
+                <button class="btn-nav" disabled>Next <i class="bi bi-chevron-right"></i></button>
+            }
+        </div>
+        <div class="keyboard-hint d-none d-md-block">
+            <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate
+        </div>
+    </div>
+    <div class="replay-progress">
+        <div class="replay-progress-bar" style="width: @progressPct%"></div>
+    </div>
+</div>
+
+<!-- Architect Banner -->
+<div class="architect-banner mb-4">
+    <i class="bi bi-brush me-1"></i>
+    Round @Model.CurrentRound — Architect:
+    <span class="architect-name">@Model.Round.ArchitectModelId</span>
+</div>
+
+<div class="row">
+    <!-- Main Content -->
+    <div class="col-lg-8">
+        <!-- Door Layout -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-door-open"></i> Door Layout</h5></div>
+            <div class="card-body">
+                <div class="d-flex gap-3 justify-content-center">
+                    @foreach (var label in new[] { 'A', 'B', 'C', 'D', 'E' })
+                    {
+                        var doorClass = label == Model.Round.TreasureDoor ? "door-treasure" :
+                                       label == Model.Round.TrapDoor ? "door-trap" : "door-empty";
+                        var doorIcon = label == Model.Round.TreasureDoor ? "bi-gem" :
+                                      label == Model.Round.TrapDoor ? "bi-exclamation-triangle" : "bi-dash";
+                        var doorLabel = label == Model.Round.TreasureDoor ? "Treasure" :
+                                       label == Model.Round.TrapDoor ? "Trap" : "Empty";
+                        <div class="door-card @doorClass">
+                            <div class="fs-4">@label</div>
+                            <i class="bi @doorIcon"></i>
+                            <small>@doorLabel</small>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Sentences -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-chat-left-text"></i> Shuffled Sentences</h5></div>
+            <div class="card-body">
+                @foreach (var sentence in Model.Round.ShuffledSentences)
+                {
+                    var sourceClass = sentence.Source == SentenceSource.Engine ? "sentence-engine" : "sentence-architect";
+                    <div class="mb-3 @sourceClass">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <span>@(sentence.Index + 1). @sentence.Text</span>
+                            <span class="text-nowrap ms-2">
+                                <span class="badge @(sentence.Source == SentenceSource.Engine ? "bg-success" : "bg-danger") status-badge">
+                                    @sentence.Source
+                                </span>
+                                @if (sentence.IsTruthful)
+                                {
+                                    <span class="badge bg-info status-badge">True</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning text-dark status-badge">Deceptive</span>
+                                }
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Player Decisions -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-people"></i> Player Decisions</h5></div>
+            <div class="card-body">
+                @foreach (var decision in Model.Round.PlayerDecisions)
+                {
+                    var outcomeClass = decision.DoorOutcome == DoorType.Treasure ? "border-warning" :
+                                      decision.DoorOutcome == DoorType.Trap ? "border-danger" : "border-secondary";
+                    var isHuman = decision.ModelId.StartsWith("human:");
+                    <div class="card mb-3 @outcomeClass" style="border-width: 2px;">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6>
+                                        @decision.ModelId
+                                        @if (isHuman)
+                                        {
+                                            <span class="badge bg-info ms-1">Human</span>
+                                        }
+                                    </h6>
+                                    <p class="mb-1">
+                                        Chose: <strong>Door @decision.ChosenDoor</strong>
+                                        <span class="badge @(decision.DoorOutcome == DoorType.Treasure ? "bg-warning text-dark" : decision.DoorOutcome == DoorType.Trap ? "bg-danger" : "bg-secondary")">
+                                            @decision.DoorOutcome
+                                        </span>
+                                    </p>
+                                    @if (decision.Reasoning != null)
+                                    {
+                                        <details class="mt-2">
+                                            <summary class="text-muted small">Show reasoning</summary>
+                                            <p class="text-muted small mt-1 mb-0"><em>@decision.Reasoning</em></p>
+                                        </details>
+                                    }
+                                </div>
+                                <div class="text-end">
+                                    <span class="@(decision.ScoreChange > 0 ? "score-positive" : decision.ScoreChange < 0 ? "score-negative" : "score-neutral") fs-4">
+                                        @(decision.ScoreChange > 0 ? "+" : "")@decision.ScoreChange
+                                    </span>
+                                    <br />
+                                    <small class="text-muted">@decision.ResponseTimeMs.ToString("F0")ms</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Scoreboard Sidebar -->
+    <div class="col-lg-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-bar-chart"></i>
+                    Scores after Round @Model.CurrentRound
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Player</th>
+                            <th class="text-center">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @{
+                            var rank = 0;
+                            var sortedScores = Model.RunningScores.OrderByDescending(kv => kv.Value).ToList();
+                        }
+                        @foreach (var kv in sortedScores)
+                        {
+                            rank++;
+                            var isHuman = kv.Key.StartsWith("human:");
+                            <tr class="@(rank == 1 ? "table-warning" : "")">
+                                <td>
+                                    @if (rank == 1) { <i class="bi bi-trophy-fill text-warning"></i> }
+                                    @rank
+                                </td>
+                                <td>
+                                    @kv.Key
+                                    @if (isHuman) { <span class="badge bg-info ms-1">Human</span> }
+                                </td>
+                                <td class="text-center">
+                                    <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
+                                        @(kv.Value > 0 ? "+" : "")@kv.Value
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- This Round's Score Changes -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning"></i> Round @Model.CurrentRound Changes</h5>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        @foreach (var kv in Model.Round.ScoreChanges)
+                        {
+                            <tr>
+                                <td>@kv.Key</td>
+                                <td class="text-center">
+                                    <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
+                                        @(kv.Value > 0 ? "+" : "")@kv.Value
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Match Info -->
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-info-circle"></i> Match Info</h5></div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li><strong>Match:</strong> <code>@Model.Match.Id.ToString()[..8]</code></li>
+                    <li><strong>Players:</strong> @string.Join(", ", Model.Match.ModelIds)</li>
+                    <li><strong>Total Rounds:</strong> @Model.CompletedRounds completed</li>
+                    <li>
+                        <strong>Status:</strong>
+                        <span class="badge @GetStatusBadgeClass(Model.Match.Status)">@Model.Match.Status</span>
+                    </li>
+                </ul>
+            </div>
+        </div>
+
+        <a asp-page="/Matches/Detail" asp-route-id="@Model.Match.Id" class="btn btn-outline-secondary w-100">
+            <i class="bi bi-arrow-left"></i> Back to Match
+        </a>
+    </div>
+</div>
+
+<!-- Bottom Navigation (mobile-friendly) -->
+<div class="d-flex justify-content-between mt-4 mb-3">
+    @if (hasPrev)
+    {
+        <a asp-page="/Replay/Index" asp-route-id="@Model.Match.Id" asp-route-round="@prevRound"
+           class="btn btn-outline-primary">
+            <i class="bi bi-chevron-left"></i> Previous Round
+        </a>
+    }
+    else
+    {
+        <button class="btn btn-outline-primary" disabled><i class="bi bi-chevron-left"></i> Previous Round</button>
+    }
+
+    @if (hasNext)
+    {
+        <a asp-page="/Replay/Index" asp-route-id="@Model.Match.Id" asp-route-round="@nextRound"
+           class="btn btn-primary">
+            Next Round <i class="bi bi-chevron-right"></i>
+        </a>
+    }
+    else
+    {
+        <button class="btn btn-primary" disabled>Next Round <i class="bi bi-chevron-right"></i></button>
+    }
+</div>
+
+@section Scripts {
+<script>
+    // Keyboard navigation
+    document.addEventListener('keydown', function(e) {
+        if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+        if (e.key === 'ArrowLeft') {
+            var prev = document.getElementById('btnPrev');
+            if (prev) prev.click();
+        } else if (e.key === 'ArrowRight') {
+            var next = document.getElementById('btnNext');
+            if (next) next.click();
+        }
+    });
+</script>
+}
+
+@functions {
+    string GetStatusBadgeClass(MatchStatus status) => status switch
+    {
+        MatchStatus.Pending => "bg-secondary",
+        MatchStatus.Running => "bg-primary",
+        MatchStatus.Paused => "bg-warning text-dark",
+        MatchStatus.Completed => "bg-success",
+        MatchStatus.Cancelled => "bg-dark",
+        MatchStatus.Failed => "bg-danger",
+        _ => "bg-secondary"
+    };
+}
