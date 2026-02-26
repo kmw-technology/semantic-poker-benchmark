@@ -1,11 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
-# Copy solution and project files
-COPY SemanticPokerBenchmark.sln ./
+# Copy only the project files WebUI actually depends on
 COPY projects/shared/src/SemanticPoker.Shared.csproj projects/shared/src/
-COPY projects/game-engine/src/SemanticPoker.GameEngine.csproj projects/game-engine/src/
-COPY projects/orchestrator/src/SemanticPoker.Api.csproj projects/orchestrator/src/
 COPY projects/webui/src/SemanticPoker.WebUI.csproj projects/webui/src/
 
 # Restore

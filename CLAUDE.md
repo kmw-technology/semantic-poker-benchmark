@@ -2,13 +2,13 @@
 
 ```
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║  AKTUELLER STATUS (Letzte Aktualisierung: 2026-02-25)                       ║
+║  AKTUELLER STATUS (Letzte Aktualisierung: 2026-02-26)                       ║
 ╠═══════════════════════════════════════════════════════════════════════════════╣
-║  Phase:      Foundation                                                      ║
+║  Phase:      Implementation Complete (Phase 1-6)                             ║
 ║  Repository: https://github.com/kmw-technology/semantic-poker-benchmark       ║
-║  Nächstes:   Core Game Engine implementieren                                 ║
+║  Build:      0 Fehler, 0 Warnungen, 189 Tests bestanden                     ║
+║  Nächstes:   Docker-Deployment testen, echte Matches laufen lassen           ║
 ╠═══════════════════════════════════════════════════════════════════════════════╣
-║  KRITISCH: Keine Production-Änderungen ohne Backup + Genehmigung!            ║
 ║  PFLICHT:  Lies MEMORY.md für vollständigen Kontext                          ║
 ║  DENKEN:   Lies .claude/markdown/CRITICAL-THINKING.md - Risk-Matrix!         ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
@@ -147,20 +147,22 @@ semantic-poker-benchmark/
 ├── .claude/                        # Claude Code Konfiguration
 │   ├── commands/                   # Custom Commands (cc-*)
 │   └── markdown/                   # AI-Instruktionen & Docs
-│       └── adr/                    # Architektur-Entscheidungen
-├── projects/                       # Source Code aller Module
-│   ├── game-engine/                # Core Game Engine (State, Sentences, Scoring)
-│   ├── orchestrator/               # LLM API Orchestration & Match Runner
-│   └── shared/                     # Gemeinsamer Code (Models, Interfaces)
-├── tests/                          # Cross-Projekt Tests (E2E, Integration)
-├── deployment/                     # Docker, CI/CD Configs
-├── documentation/                  # Referenz-Dokumentation
-├── tools/                          # Hilfs-Tools, Utilities
-├── scripts/                        # Build-/Run-Scripts
-├── resources/                      # Seed-Daten, Prompt-Templates
-├── artifacts/                      # Build-Outputs, Benchmark-Reports
-├── temporary/                      # Scratch-Dateien (gitignored)
-├── secrets/                        # Lokale Secrets (gitignored)
+├── .github/workflows/ci.yml       # GitHub Actions CI Pipeline
+├── projects/
+│   ├── shared/src/                 # Enums, Models, Interfaces, DTOs (37 Dateien)
+│   ├── game-engine/src/            # StateGenerator, 13 Templates, ScoreCalculator (19 Dateien)
+│   ├── orchestrator/src/           # REST API (Port 5000)
+│   │   ├── Controllers/            # 5 Controller (Matches, Models, Leaderboard, Health, Debug)
+│   │   ├── Hubs/                   # SignalR MatchProgressHub
+│   │   ├── Infrastructure/         # EF Core (SQLite), OllamaAdapter
+│   │   └── Services/               # MatchRunner, PromptBuilder, ResponseParser, etc.
+│   └── webui/src/                  # Razor Pages UI (Port 5010)
+│       ├── Pages/                  # 8 Seiten (Dashboard, Matches, Leaderboard, Analysis, Debug)
+│       └── Services/               # BenchmarkApiClient (HTTP → API)
+├── tests/                          # E2E Tests
+├── deployment/                     # docker-compose.yml, Dockerfiles, .env.example
+├── scripts/                        # ollama-init.sh
+├── SemanticPokerBenchmark.sln      # Solution (9 Projekte)
 ├── CLAUDE.md                       # Diese Datei
 ├── MEMORY.md                       # Langzeit-Gedächtnis
 └── LESSONS-LEARNED.md              # Persistentes Error-Learning
@@ -174,12 +176,14 @@ semantic-poker-benchmark/
 
 | Komponente | Technologie |
 |------------|-------------|
-| Backend | ASP.NET Core 8 (C#) |
-| API | REST (Minimal API oder Controllers) |
-| Datenbank | SQLite (lokal) / PostgreSQL (optional) |
-| LLM Integration | HttpClient + Provider-Adapters |
+| Backend API | ASP.NET Core 8 (C#), REST Controllers, Swagger/OpenAPI |
+| Web UI | ASP.NET Core 8 Razor Pages, Bootstrap 5, Chart.js |
+| Datenbank | SQLite via EF Core (`benchmark.db`) |
+| LLM Server | Ollama (Docker, GPU), OpenAI-kompatible API |
+| Echtzeit | SignalR (`/hubs/match-progress`) |
 | CI/CD | GitHub Actions |
-| Container | Docker (optional) |
+| Container | Docker Compose (Ollama + API + WebUI) |
+| Modelle | phi3.5, deepseek-r1:1.5b, llama3.2:3b |
 
 ---
 
@@ -187,29 +191,31 @@ semantic-poker-benchmark/
 
 ### 1. API-First
 - JEDE Funktionalität = zuerst API-Endpoint
-- UI greift NUR über HTTP auf API zu
+- UI greift NUR über HTTP auf API zu (BenchmarkApiClient)
 - NIEMALS direkter DB-Zugriff aus UI
 
-### 2. Modulare Architektur
-- **game-engine**: Generiert States, True Sentences, validiert und scored
-- **orchestrator**: Steuert LLM-Calls, Match-Ablauf, Ergebnis-Aggregation
-- **shared**: DTOs, Interfaces, Enums
+### 2. Modulare Architektur (4 Projekte + 5 Tests)
+- **shared** (`projects/shared/src/`): DTOs, Interfaces, Enums, Models — KEINE Abhängigkeiten
+- **game-engine** (`projects/game-engine/src/`): StateGenerator, 13 Templates, ScoreCalculator → nur Shared
+- **orchestrator** (`projects/orchestrator/src/`): REST API, EF Core, Ollama, Match-Runner → Shared + GameEngine
+- **webui** (`projects/webui/src/`): Razor Pages, BenchmarkApiClient → NUR Shared (HTTP zu API)
 
 ### MODUL-ABHÄNGIGKEITS-REGELN (KRITISCH!)
 ```
 ERLAUBT:
-  game-engine → shared
-  orchestrator → shared
-  orchestrator → game-engine (über Interfaces)
+  GameEngine → Shared
+  Api (orchestrator) → Shared + GameEngine
+  WebUI → Shared (NUR!)
 
 VERBOTEN:
-  game-engine → orchestrator (Engine kennt keine LLMs!)
-  shared → game-engine/orchestrator
+  GameEngine → Api (Engine kennt keine LLMs!)
+  Shared → irgendwas
+  WebUI → GameEngine oder Api (UI nur über HTTP!)
 ```
 
 ### 3. Clean Architecture
 ```
-Domain (Models) → Application (Services) → Infrastructure (LLM Adapters, DB) → API
+Shared (Domain) → GameEngine (Logic) → Api (Services + Infrastructure) → WebUI (HTTP Client)
 ```
 
 ---
@@ -229,17 +235,20 @@ Domain (Models) → Application (Services) → Infrastructure (LLM Adapters, DB)
 ## WICHTIGE BEFEHLE
 
 ```bash
-# Build
+# Build (alle 9 Projekte)
 dotnet build
 
-# Tests
+# Tests (189 Tests)
 dotnet test
 
-# App starten
+# Backend API starten (Port 5000, Swagger: /swagger)
 dotnet run --project projects/orchestrator/src/
 
-# Einzelnes Benchmark-Match starten (TODO)
-dotnet run -- --match single --models gpt-4,claude-3.5,gemini-1.5
+# Web UI starten (Port 5010)
+dotnet run --project projects/webui/src/
+
+# Docker (alle Services)
+docker compose -f deployment/docker-compose.yml up -d
 ```
 
 ---
