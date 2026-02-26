@@ -344,7 +344,9 @@ public class MatchesController : ControllerBase
         };
 
         // Populate spectator context from in-progress round
-        if (inProgressRound != null)
+        // IMPORTANT: Only include spectator data when it's NOT the human's turn,
+        // to prevent the human player from seeing source attribution and door answers.
+        if (inProgressRound != null && waitingContext == null)
         {
             response.CurrentArchitectId = inProgressRound.ArchitectModelId;
             response.CurrentRoundPhase = inProgressRound.Phase.ToString();

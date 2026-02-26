@@ -198,7 +198,7 @@ public class MatchRunnerService
         var llmOptions = new LlmRequestOptions
         {
             Temperature = match.Config.LlmTemperature,
-            MaxTokens = 1024,
+            MaxTokens = 50000,
             TimeoutSeconds = match.Config.LlmTimeoutSeconds
         };
 
