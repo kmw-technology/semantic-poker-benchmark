@@ -1,0 +1,110 @@
+@page
+@model SemanticPoker.WebUI.Pages.Lobby.CreateModel
+@{
+    ViewData["Title"] = "Interactive Lobby";
+}
+
+<h1><i class="bi bi-joystick"></i> Interactive Lobby</h1>
+<p class="text-muted">Play against LLM models in real-time.</p>
+
+@if (Model.ErrorMessage != null)
+{
+    <div class="alert alert-danger">@Model.ErrorMessage</div>
+}
+
+<form method="post">
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="mb-0"><i class="bi bi-robot"></i> Select LLM Opponents</h5></div>
+                <div class="card-body">
+                    @if (!Model.AvailableModels.Any())
+                    {
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle"></i> No models available. Ensure Ollama is running with models pulled.
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted small">Select at least 2 LLM opponents to play against.</p>
+                        @foreach (var m in Model.AvailableModels)
+                        {
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" name="SelectedModels"
+                                       value="@m.ModelId" id="model-@m.ModelId"
+                                       @(Model.SelectedModels.Contains(m.ModelId) ? "checked" : "")>
+                                <label class="form-check-label" for="model-@m.ModelId">
+                                    <strong>@m.DisplayName</strong>
+                                    @if (m.ParameterCount.HasValue)
+                                    {
+                                        <span class="text-muted small">(@((m.ParameterCount.Value / 1_000_000_000.0).ToString("F1"))B params)</span>
+                                    }
+                                    <span class="badge bg-info status-badge">@m.Provider</span>
+                                </label>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="mb-0"><i class="bi bi-person"></i> Player Settings</h5></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="humanPlayerName" class="form-label">Your Name</label>
+                        <input type="text" class="form-control" name="HumanPlayerName" id="humanPlayerName"
+                               value="@Model.HumanPlayerName" placeholder="Enter your name">
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="mb-0"><i class="bi bi-gear"></i> Game Settings</h5></div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label">Number of Rounds</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="TotalRounds" value="5"
+                                   id="rounds5" @(Model.TotalRounds == 5 ? "checked" : "")>
+                            <label class="form-check-label" for="rounds5">5 rounds</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="TotalRounds" value="10"
+                                   id="rounds10" @(Model.TotalRounds == 10 ? "checked" : "")>
+                            <label class="form-check-label" for="rounds10">10 rounds (Default)</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="TotalRounds" value="25"
+                                   id="rounds25" @(Model.TotalRounds == 25 ? "checked" : "")>
+                            <label class="form-check-label" for="rounds25">25 rounds</label>
+                        </div>
+                    </div>
+
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="AdaptivePlay"
+                               value="true" id="adaptivePlay" @(Model.AdaptivePlay ? "checked" : "")>
+                        <label class="form-check-label" for="adaptivePlay">
+                            Adaptive Play
+                            <small class="text-muted d-block">Models see previous round history</small>
+                        </label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" name="RotateArchitect"
+                               value="true" id="rotateArchitect" @(Model.RotateArchitect ? "checked" : "")>
+                        <label class="form-check-label" for="rotateArchitect">
+                            Rotate Architect
+                            <small class="text-muted d-block">Round-robin architect assignment</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg w-100">
+                <i class="bi bi-joystick"></i> Start Game
+            </button>
+        </div>
+    </div>
+</form>

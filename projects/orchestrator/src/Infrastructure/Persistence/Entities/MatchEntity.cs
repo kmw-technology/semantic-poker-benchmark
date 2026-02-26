@@ -20,6 +20,8 @@ public class MatchEntity
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
+    public bool IsInteractive { get; set; }
+    public string? HumanPlayerName { get; set; }
 
     public List<RoundEntity> Rounds { get; set; } = new();
 }

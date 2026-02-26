@@ -21,6 +21,9 @@ public interface IBenchmarkApiClient
     Task<GenerateStateResponse> GenerateStateAsync(GenerateStateRequest request);
     Task<GenerateSentencesResponse> GenerateSentencesAsync(GenerateSentencesRequest request);
     Task<TestPromptResponse> TestPromptAsync(TestPromptRequest request);
+    Task<MatchResponse?> CreateInteractiveMatchAsync(CreateInteractiveMatchRequest request);
+    Task<InteractiveMatchStateResponse?> GetInteractiveStateAsync(Guid matchId);
+    Task<bool> SubmitHumanInputAsync(Guid matchId, SubmitHumanInputRequest input);
 }
 
 public class BenchmarkApiClient : IBenchmarkApiClient
@@ -139,5 +142,32 @@ public class BenchmarkApiClient : IBenchmarkApiClient
         var response = await _http.PostAsJsonAsync("/api/debug/test-prompt", request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<TestPromptResponse>() ?? new();
+    }
+
+    public async Task<MatchResponse?> CreateInteractiveMatchAsync(CreateInteractiveMatchRequest request)
+    {
+        var response = await _http.PostAsJsonAsync("/api/matches/interactive", request);
+        if (response.IsSuccessStatusCode)
+            return await response.Content.ReadFromJsonAsync<MatchResponse>();
+        return null;
+    }
+
+    public async Task<InteractiveMatchStateResponse?> GetInteractiveStateAsync(Guid matchId)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<InteractiveMatchStateResponse>(
+                $"/api/matches/{matchId}/interactive-state");
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> SubmitHumanInputAsync(Guid matchId, SubmitHumanInputRequest input)
+    {
+        var response = await _http.PostAsJsonAsync($"/api/matches/{matchId}/human-input", input);
+        return response.IsSuccessStatusCode;
     }
 }

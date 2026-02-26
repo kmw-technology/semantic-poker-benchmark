@@ -14,15 +14,18 @@ public class MatchesController : ControllerBase
 {
     private readonly IMatchRepository _repository;
     private readonly MatchExecutionQueue _queue;
+    private readonly HumanInputCoordinator _humanInput;
     private readonly ILogger<MatchesController> _logger;
 
     public MatchesController(
         IMatchRepository repository,
         MatchExecutionQueue queue,
+        HumanInputCoordinator humanInput,
         ILogger<MatchesController> logger)
     {
         _repository = repository;
         _queue = queue;
+        _humanInput = humanInput;
         _logger = logger;
     }
 
@@ -215,7 +218,9 @@ public class MatchesController : ControllerBase
             CreatedAt = match.CreatedAt,
             StartedAt = match.StartedAt,
             CompletedAt = match.CompletedAt,
-            ErrorMessage = match.ErrorMessage
+            ErrorMessage = match.ErrorMessage,
+            IsInteractive = match.Config.IsInteractive,
+            HumanPlayerName = match.Config.HumanPlayerName
         };
     }
 
@@ -233,5 +238,129 @@ public class MatchesController : ControllerBase
             StartedAt = round.StartedAt,
             CompletedAt = round.CompletedAt
         };
+    }
+
+    [HttpPost("interactive")]
+    public async Task<IActionResult> CreateInteractive(
+        [FromBody] CreateInteractiveMatchRequest request, CancellationToken ct)
+    {
+        if (request.ModelIds == null || request.ModelIds.Count < 2)
+            return BadRequest(new { Error = "At least 2 LLM models are required for interactive mode." });
+
+        var humanModelId = $"human:{request.HumanPlayerName ?? "Human"}";
+        var allModelIds = new List<string> { humanModelId };
+        allModelIds.AddRange(request.ModelIds);
+
+        var match = new Match
+        {
+            Id = Guid.NewGuid(),
+            Status = MatchStatus.Pending,
+            Config = new MatchConfig
+            {
+                TotalRounds = request.TotalRounds,
+                ModelIds = allModelIds,
+                RotateArchitect = request.RotateArchitect,
+                AdaptivePlay = request.AdaptivePlay,
+                RandomSeed = request.RandomSeed,
+                OllamaBaseUrl = request.OllamaBaseUrl ?? "http://localhost:11434",
+                LlmTimeoutSeconds = request.LlmTimeoutSeconds ?? 120,
+                LlmTemperature = request.LlmTemperature ?? 0.7,
+                IsInteractive = true,
+                HumanPlayerName = request.HumanPlayerName ?? "Human"
+            },
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await _repository.CreateAsync(match, ct);
+        await _queue.EnqueueAsync(match.Id, ct);
+
+        return Accepted(MapToResponse(match));
+    }
+
+    [HttpGet("{id:guid}/interactive-state")]
+    public async Task<IActionResult> GetInteractiveState(Guid id, CancellationToken ct)
+    {
+        var match = await _repository.GetByIdAsync(id, ct);
+        if (match == null)
+            return NotFound();
+
+        var waitingContext = _humanInput.GetWaitingContext(id);
+        var completedRounds = match.Rounds.Where(r => r.Phase == RoundPhase.Completed).ToList();
+        var lastRound = completedRounds.OrderByDescending(r => r.RoundNumber).FirstOrDefault();
+
+        var response = new InteractiveMatchStateResponse
+        {
+            MatchId = match.Id,
+            Status = match.Status,
+            CurrentRound = completedRounds.Count + 1,
+            TotalRounds = match.Config.TotalRounds,
+            Scores = match.Scores,
+            IsHumanTurn = waitingContext != null,
+            HumanRole = waitingContext?.HumanRole,
+            ExpectedInputType = waitingContext?.InputType,
+            TreasureDoor = waitingContext?.TreasureDoor,
+            TrapDoor = waitingContext?.TrapDoor,
+            EngineSentences = waitingContext?.EngineSentences,
+            ShuffledSentences = waitingContext?.ShuffledSentences
+        };
+
+        if (lastRound != null)
+        {
+            var playerDecisions = lastRound.PlayerDecisions
+                .Where(d => d.Role == PlayerRole.Player)
+                .ToList();
+
+            response.LastRoundResult = new RoundResultSummary
+            {
+                RoundNumber = lastRound.RoundNumber,
+                ArchitectModelId = lastRound.ArchitectModelId,
+                TreasureDoor = lastRound.GameState.TreasureDoor.Label,
+                TrapDoor = lastRound.GameState.TrapDoor.Label,
+                PlayerChoices = playerDecisions.ToDictionary(d => d.ModelId, d => d.ChosenDoor),
+                ScoreChanges = lastRound.PlayerDecisions.ToDictionary(d => d.ModelId, d => d.ScoreChange)
+            };
+        }
+
+        return Ok(response);
+    }
+
+    [HttpPost("{id:guid}/human-input")]
+    public async Task<IActionResult> SubmitHumanInput(
+        Guid id, [FromBody] SubmitHumanInputRequest request, CancellationToken ct)
+    {
+        var match = await _repository.GetByIdAsync(id, ct);
+        if (match == null)
+            return NotFound();
+
+        if (match.Status != MatchStatus.WaitingForHumanInput)
+            return Conflict(new { Error = "Match is not waiting for human input." });
+
+        // Validate based on input type
+        if (request.InputType == PlayerRole.Architect)
+        {
+            if (request.ArchitectSentences == null || request.ArchitectSentences.Count == 0)
+                return BadRequest(new { Error = "Architect must provide at least 1 sentence." });
+            if (request.ArchitectSentences.Count > 3)
+                return BadRequest(new { Error = "Architect can provide at most 3 sentences." });
+        }
+        else if (request.InputType == PlayerRole.Player)
+        {
+            if (request.ChosenDoor == null || request.ChosenDoor < 'A' || request.ChosenDoor > 'E')
+                return BadRequest(new { Error = "Player must choose a door between A and E." });
+        }
+
+        var humanInput = new HumanInput
+        {
+            InputType = request.InputType,
+            ArchitectSentences = request.ArchitectSentences,
+            ChosenDoor = request.ChosenDoor,
+            Reasoning = request.Reasoning
+        };
+
+        var accepted = _humanInput.SubmitInput(id, humanInput);
+        if (!accepted)
+            return Conflict(new { Error = "No pending input request for this match." });
+
+        return Ok(new { Message = "Input accepted." });
     }
 }

@@ -14,4 +14,6 @@ public class MatchResponse
     public DateTime? StartedAt { get; set; }
     public DateTime? CompletedAt { get; set; }
     public string? ErrorMessage { get; set; }
+    public bool IsInteractive { get; set; }
+    public string? HumanPlayerName { get; set; }
 }

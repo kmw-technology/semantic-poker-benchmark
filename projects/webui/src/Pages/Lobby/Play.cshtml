@@ -1,0 +1,477 @@
+@page "{id:guid}"
+@model SemanticPoker.WebUI.Pages.Lobby.PlayModel
+@{
+    ViewData["Title"] = "Interactive Match";
+}
+
+@if (Model.Match is null)
+{
+    <div class="alert alert-danger">Match not found.</div>
+    return;
+}
+
+@{
+    var isCompleted = Model.Match.Status == MatchStatus.Completed;
+    var isCancelled = Model.Match.Status == MatchStatus.Cancelled;
+    var isFailed = Model.Match.Status == MatchStatus.Failed;
+    var isFinished = isCompleted || isCancelled || isFailed;
+    var isHumanArchitect = Model.GameState?.IsHumanTurn == true
+        && Model.GameState.ExpectedInputType == PlayerRole.Architect;
+    var isHumanPlayer = Model.GameState?.IsHumanTurn == true
+        && Model.GameState.ExpectedInputType == PlayerRole.Player;
+    var isWaiting = !isFinished && !isHumanArchitect && !isHumanPlayer;
+    var currentRound = Model.GameState?.CurrentRound ?? Model.Match.CompletedRounds;
+    var totalRounds = Model.Match.TotalRounds;
+    var pct = totalRounds > 0 ? (int)(100.0 * Model.Match.CompletedRounds / totalRounds) : 0;
+}
+
+<!-- Header -->
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1>
+            <i class="bi bi-joystick"></i> Interactive Match
+            <code>@Model.Match.Id.ToString()[..8]</code>
+        </h1>
+        <span class="badge @GetStatusBadgeClass(Model.Match.Status) fs-6">@Model.Match.Status</span>
+        @if (Model.Match.HumanPlayerName != null)
+        {
+            <span class="badge bg-info fs-6 ms-2"><i class="bi bi-person-fill"></i> @Model.Match.HumanPlayerName</span>
+        }
+    </div>
+    <div>
+        <span class="fs-5 fw-bold">Round @currentRound of @totalRounds</span>
+    </div>
+</div>
+
+<!-- Progress bar -->
+<div class="mb-4">
+    <div class="progress" style="height: 20px;">
+        <div class="progress-bar @(pct == 100 ? "bg-success" : "bg-primary")" role="progressbar"
+             style="width: @pct%">@pct%</div>
+    </div>
+</div>
+
+@if (Model.ErrorMessage != null)
+{
+    <div class="alert alert-danger">@Model.ErrorMessage</div>
+}
+
+<div class="row">
+    <!-- Main content area -->
+    <div class="col-lg-8 order-2 order-lg-1">
+
+        @* ===== State E: Match completed ===== *@
+        @if (isCompleted)
+        {
+            <div class="card border-success mb-4">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-trophy-fill"></i> Match Complete!</h5>
+                </div>
+                <div class="card-body">
+                    @{
+                        var sortedScores = Model.Match.Scores.OrderByDescending(kv => kv.Value).ToList();
+                        var winner = sortedScores.FirstOrDefault();
+                        var rank = 0;
+                    }
+                    @if (winner.Key != null)
+                    {
+                        <div class="text-center mb-4">
+                            <h3 class="text-warning"><i class="bi bi-trophy-fill"></i> Winner: @winner.Key</h3>
+                            <p class="fs-4">Score: <strong>@winner.Value</strong></p>
+                        </div>
+                    }
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Player</th>
+                                <th class="text-center">Final Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var kv in sortedScores)
+                            {
+                                rank++;
+                                var isHuman = kv.Key == Model.Match.HumanPlayerName;
+                                <tr class="@(rank == 1 ? "table-warning" : "") @(isHuman ? "fw-bold" : "")">
+                                    <td>
+                                        @if (rank == 1) { <i class="bi bi-trophy-fill text-warning"></i> }
+                                        @rank
+                                    </td>
+                                    <td>
+                                        @kv.Key
+                                        @if (isHuman) { <span class="badge bg-info ms-1">You</span> }
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
+                                            @(kv.Value > 0 ? "+" : "")@kv.Value
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                    <div class="text-center mt-3">
+                        <a asp-page="/Matches/Detail" asp-route-id="@Model.Match.Id" class="btn btn-outline-primary">
+                            <i class="bi bi-list-ol"></i> View Full Match Details
+                        </a>
+                        <a asp-page="/Lobby/Create" class="btn btn-primary ms-2">
+                            <i class="bi bi-joystick"></i> Play Again
+                        </a>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @* ===== State: Cancelled or Failed ===== *@
+        else if (isCancelled || isFailed)
+        {
+            <div class="card border-danger mb-4">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-x-circle-fill"></i>
+                        Match @(isCancelled ? "Cancelled" : "Failed")
+                    </h5>
+                </div>
+                <div class="card-body">
+                    @if (Model.Match.ErrorMessage != null)
+                    {
+                        <div class="alert alert-danger">@Model.Match.ErrorMessage</div>
+                    }
+                    <p class="text-muted">This match has ended. You can start a new game.</p>
+                    <a asp-page="/Lobby/Create" class="btn btn-primary">
+                        <i class="bi bi-joystick"></i> Start New Game
+                    </a>
+                </div>
+            </div>
+        }
+
+        @* ===== State B: Human is Architect ===== *@
+        else if (isHumanArchitect)
+        {
+            <div class="card border-warning mb-4">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="bi bi-pencil-square"></i> You are the Architect this round!</h5>
+                </div>
+                <div class="card-body">
+                    <p>Your job is to write deceptive sentences that trick the other players into choosing the wrong door.</p>
+
+                    @if (Model.GameState?.TreasureDoor != null && Model.GameState?.TrapDoor != null)
+                    {
+                        <div class="row mb-3">
+                            <div class="col-6">
+                                <div class="card bg-success bg-opacity-10 border-success">
+                                    <div class="card-body text-center py-2">
+                                        <small class="text-muted">Treasure Door</small>
+                                        <h3 class="text-success mb-0">@Model.GameState.TreasureDoor</h3>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="card bg-danger bg-opacity-10 border-danger">
+                                    <div class="card-body text-center py-2">
+                                        <small class="text-muted">Trap Door</small>
+                                        <h3 class="text-danger mb-0">@Model.GameState.TrapDoor</h3>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (Model.GameState?.EngineSentences?.Any() == true)
+                    {
+                        <div class="card bg-light mb-3">
+                            <div class="card-header"><strong>Engine Sentences (truthful):</strong></div>
+                            <div class="card-body">
+                                <ul class="mb-0">
+                                    @foreach (var sentence in Model.GameState.EngineSentences)
+                                    {
+                                        <li>@sentence</li>
+                                    }
+                                </ul>
+                            </div>
+                        </div>
+                    }
+
+                    <form method="post" asp-page-handler="Architect" asp-route-id="@Model.MatchId">
+                        <div class="mb-3">
+                            <label for="sentence1" class="form-label">Deceptive Sentence 1</label>
+                            <input type="text" class="form-control" name="Sentence1" id="sentence1"
+                                   value="@Model.Sentence1"
+                                   placeholder="Write a sentence that sounds like it describes a door truthfully...">
+                        </div>
+                        <div class="mb-3">
+                            <label for="sentence2" class="form-label">Deceptive Sentence 2</label>
+                            <input type="text" class="form-control" name="Sentence2" id="sentence2"
+                                   value="@Model.Sentence2"
+                                   placeholder="Another misleading hint about the doors...">
+                        </div>
+                        <div class="mb-3">
+                            <label for="sentence3" class="form-label">Deceptive Sentence 3</label>
+                            <input type="text" class="form-control" name="Sentence3" id="sentence3"
+                                   value="@Model.Sentence3"
+                                   placeholder="A third deceptive clue (optional)...">
+                        </div>
+
+                        <div class="alert alert-info small">
+                            <i class="bi bi-lightbulb"></i>
+                            <strong>Tip:</strong> Your sentences will be shuffled with the engine's truthful sentences.
+                            Try to match the rigid, formulaic style so players can't tell which are yours!
+                        </div>
+
+                        <button type="submit" class="btn btn-warning btn-lg w-100">
+                            <i class="bi bi-send-fill"></i> Submit Sentences
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        @* ===== State C: Human is Player ===== *@
+        else if (isHumanPlayer)
+        {
+            <div class="card border-primary mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-door-open"></i> You are a Player this round!</h5>
+                </div>
+                <div class="card-body">
+                    <p>Read the sentences below and choose the door you believe hides the <strong>treasure</strong>.</p>
+
+                    @if (Model.GameState?.ShuffledSentences?.Any() == true)
+                    {
+                        <div class="card bg-light mb-3">
+                            <div class="card-header">
+                                <strong>Clue Sentences</strong>
+                                <small class="text-muted ms-2">
+                                    (2 are truthful from the engine, 3 may be deceptive from the Architect)
+                                </small>
+                            </div>
+                            <div class="card-body">
+                                <ol class="mb-0">
+                                    @foreach (var sentence in Model.GameState.ShuffledSentences.OrderBy(s => s.Index))
+                                    {
+                                        <li class="mb-2">@sentence.Text</li>
+                                    }
+                                </ol>
+                            </div>
+                        </div>
+                    }
+
+                    <form method="post" asp-page-handler="Player" asp-route-id="@Model.MatchId">
+                        <label class="form-label fw-bold">Choose a Door:</label>
+                        <div class="row mb-3">
+                            @foreach (var door in new[] { 'A', 'B', 'C', 'D', 'E' })
+                            {
+                                <div class="col">
+                                    <input type="radio" class="btn-check" name="ChosenDoor" value="@door"
+                                           id="door-@door" autocomplete="off"
+                                           @(Model.ChosenDoor == door ? "checked" : "")>
+                                    <label class="btn btn-outline-primary w-100 py-3 fs-4 fw-bold" for="door-@door">
+                                        <i class="bi bi-door-closed"></i><br>@door
+                                    </label>
+                                </div>
+                            }
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="reasoning" class="form-label">Your Reasoning (optional)</label>
+                            <textarea class="form-control" name="Reasoning" id="reasoning" rows="2"
+                                      placeholder="Why did you choose this door?">@Model.Reasoning</textarea>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100">
+                            <i class="bi bi-door-open-fill"></i> Choose Door
+                        </button>
+                    </form>
+                </div>
+            </div>
+        }
+
+        @* ===== State A: Waiting for LLMs ===== *@
+        else if (isWaiting)
+        {
+            <div class="card mb-4">
+                <div class="card-body text-center py-5">
+                    <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <h4 class="text-muted">Waiting for other players...</h4>
+                    <p class="text-muted">LLM models are making their decisions. This page will update automatically.</p>
+                </div>
+            </div>
+        }
+
+        @* ===== Last round result (shown below the main action when available) ===== *@
+        @if (Model.GameState?.LastRoundResult != null && !isCompleted)
+        {
+            var result = Model.GameState.LastRoundResult;
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> Round @result.RoundNumber Result</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Architect:</strong> @result.ArchitectModelId</p>
+
+                    <div class="row mb-3">
+                        @foreach (var door in new[] { 'A', 'B', 'C', 'D', 'E' })
+                        {
+                            var isTreasure = door == result.TreasureDoor;
+                            var isTrap = door == result.TrapDoor;
+                            var doorClass = isTreasure ? "bg-success bg-opacity-10 border-success"
+                                : isTrap ? "bg-danger bg-opacity-10 border-danger"
+                                : "bg-light";
+                            <div class="col">
+                                <div class="card @doorClass text-center py-2">
+                                    <strong>@door</strong>
+                                    @if (isTreasure) { <small class="text-success">Treasure</small> }
+                                    else if (isTrap) { <small class="text-danger">Trap</small> }
+                                    else { <small class="text-muted">Empty</small> }
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Player</th>
+                                <th class="text-center">Chose Door</th>
+                                <th class="text-center">Score Change</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var choice in result.PlayerChoices)
+                            {
+                                var scoreChange = result.ScoreChanges.GetValueOrDefault(choice.Key, 0);
+                                var isHuman = choice.Key == Model.Match.HumanPlayerName;
+                                <tr class="@(isHuman ? "fw-bold" : "")">
+                                    <td>
+                                        @choice.Key
+                                        @if (isHuman) { <span class="badge bg-info ms-1">You</span> }
+                                    </td>
+                                    <td class="text-center">@choice.Value</td>
+                                    <td class="text-center">
+                                        <span class="@(scoreChange > 0 ? "score-positive" : scoreChange < 0 ? "score-negative" : "score-neutral")">
+                                            @(scoreChange > 0 ? "+" : "")@scoreChange
+                                        </span>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Scoreboard sidebar -->
+    <div class="col-lg-4 order-1 order-lg-2">
+        <div class="card mb-4">
+            <div class="card-header"><h5 class="mb-0"><i class="bi bi-bar-chart"></i> Scoreboard</h5></div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Player</th>
+                            <th class="text-center">Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var kv in Model.Match.Scores.OrderByDescending(kv => kv.Value))
+                        {
+                            var isHuman = kv.Key == Model.Match.HumanPlayerName;
+                            <tr class="@(isHuman ? "table-info" : "")">
+                                <td>
+                                    @kv.Key
+                                    @if (isHuman) { <span class="badge bg-info ms-1">You</span> }
+                                </td>
+                                <td class="text-center">
+                                    <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
+                                        @(kv.Value > 0 ? "+" : "")@kv.Value
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        @if (!isFinished)
+        {
+            <div class="card mb-4">
+                <div class="card-header"><h5 class="mb-0"><i class="bi bi-info-circle"></i> Match Info</h5></div>
+                <div class="card-body">
+                    <ul class="list-unstyled mb-0">
+                        <li><strong>Match ID:</strong> <code>@Model.Match.Id.ToString()[..8]</code></li>
+                        <li><strong>Models:</strong> @string.Join(", ", Model.Match.ModelIds)</li>
+                        <li><strong>Progress:</strong> @Model.Match.CompletedRounds / @totalRounds rounds</li>
+                    </ul>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/@@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
+    <script>
+        const matchId = '@Model.MatchId';
+        const matchStatus = '@Model.Match.Status';
+        const apiBaseUrl = '@(ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["BenchmarkApi:BaseUrl"] ?? "http://localhost:5000")';
+
+        if (matchStatus !== 'Completed' && matchStatus !== 'Cancelled' && matchStatus !== 'Failed') {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl(apiBaseUrl + '/hubs/match-progress')
+                .withAutomaticReconnect()
+                .build();
+
+            connection.on('WaitingForHumanInput', function(data) {
+                console.log('Waiting for human input:', data);
+                window.location.reload();
+            });
+
+            connection.on('RoundCompleted', function(data) {
+                console.log('Round completed:', data);
+                window.location.reload();
+            });
+
+            connection.on('MatchCompleted', function(data) {
+                console.log('Match completed:', data);
+                window.location.reload();
+            });
+
+            connection.start()
+                .then(function() {
+                    console.log('SignalR connected');
+                    return connection.invoke('JoinMatchGroup', matchId);
+                })
+                .then(function() {
+                    console.log('Joined match group:', matchId);
+                })
+                .catch(function(err) {
+                    console.warn('SignalR failed, falling back to polling:', err);
+                });
+
+            // Fallback: poll every 8 seconds when page is visible
+            setInterval(function() {
+                if (document.hidden) return;
+                window.location.reload();
+            }, 8000);
+        }
+    </script>
+}
+
+@functions {
+    string GetStatusBadgeClass(MatchStatus status) => status switch
+    {
+        MatchStatus.Pending => "bg-secondary",
+        MatchStatus.Running => "bg-primary",
+        MatchStatus.Paused => "bg-warning text-dark",
+        MatchStatus.Completed => "bg-success",
+        MatchStatus.Cancelled => "bg-dark",
+        MatchStatus.Failed => "bg-danger",
+        MatchStatus.WaitingForHumanInput => "bg-info",
+        _ => "bg-secondary"
+    };
+}

@@ -10,4 +10,6 @@ public class MatchConfig
     public string OllamaBaseUrl { get; set; } = "http://localhost:11434";
     public int LlmTimeoutSeconds { get; set; } = 120;
     public double LlmTemperature { get; set; } = 0.7;
+    public bool IsInteractive { get; set; } = false;
+    public string? HumanPlayerName { get; set; }
 }

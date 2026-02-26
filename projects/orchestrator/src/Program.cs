@@ -37,6 +37,7 @@ builder.Services.AddSingleton<AdaptiveHistoryBuilder>();
 builder.Services.AddSingleton<ArchitectRotation>();
 builder.Services.AddScoped<MatchRunnerService>();
 builder.Services.AddSingleton<MatchExecutionQueue>();
+builder.Services.AddSingleton<HumanInputCoordinator>();
 builder.Services.AddHostedService<MatchExecutionService>();
 
 // Controllers

@@ -32,6 +32,8 @@ public static class EntityMapper
             StartedAt = match.StartedAt,
             CompletedAt = match.CompletedAt,
             ErrorMessage = match.ErrorMessage,
+            IsInteractive = match.Config.IsInteractive,
+            HumanPlayerName = match.Config.HumanPlayerName,
             Rounds = match.Rounds.Select(ToEntity).ToList()
         };
     }
@@ -51,7 +53,9 @@ public static class EntityMapper
                 RandomSeed = entity.RandomSeed,
                 OllamaBaseUrl = entity.OllamaBaseUrl,
                 LlmTimeoutSeconds = entity.LlmTimeoutSeconds,
-                LlmTemperature = entity.LlmTemperature
+                LlmTemperature = entity.LlmTemperature,
+                IsInteractive = entity.IsInteractive,
+                HumanPlayerName = entity.HumanPlayerName
             },
             Scores = JsonSerializer.Deserialize<Dictionary<string, int>>(entity.ScoresJson, JsonOptions) ?? new(),
             CreatedAt = entity.CreatedAt,
