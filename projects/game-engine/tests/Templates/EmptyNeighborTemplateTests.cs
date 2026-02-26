@@ -115,7 +115,7 @@ public class EmptyNeighborTemplateTests
             if (text.Contains("Trap"))
             {
                 // A(Trap) neighbors: none on left, B(Treasure) on right = 0 empty
-                Assert.Contains("exactly 0 Empty doors", text);
+                Assert.Contains("is not adjacent to any Empty door", text);
                 foundTrapWithZero = true;
             }
         }
@@ -147,6 +147,10 @@ public class EmptyNeighborTemplateTests
         var rng = new Random(42);
         var text = _template.Generate(state, rng);
 
-        Assert.Matches(@"^The (Treasure|Trap) has exactly \d+ Empty doors? as immediate neighbors?\.$", text);
+        // Two possible formats: count=0 uses alternate wording, count>0 uses original
+        Assert.True(
+            System.Text.RegularExpressions.Regex.IsMatch(text, @"^The (Treasure|Trap) has exactly \d+ Empty doors? as immediate neighbors?\.$") ||
+            System.Text.RegularExpressions.Regex.IsMatch(text, @"^The (Treasure|Trap) is not adjacent to any Empty door\.$"),
+            $"Unexpected format: {text}");
     }
 }

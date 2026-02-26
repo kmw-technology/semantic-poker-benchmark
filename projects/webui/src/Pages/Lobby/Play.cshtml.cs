@@ -19,9 +19,15 @@ public class PlayModel : PageModel
 
     /// <summary>
     /// The current viewer's player ID (e.g. "human:Alice"). From ?player= query param.
+    /// Used for API calls (real ID needed for human-input endpoint).
     /// </summary>
     [BindProperty(SupportsGet = true, Name = "player")]
     public string? PlayerId { get; set; }
+
+    /// <summary>
+    /// The calling player's pseudonym (e.g. "Alpha") for display in anonymized UI.
+    /// </summary>
+    public string? MyPseudonym { get; set; }
 
     [BindProperty]
     public string? Sentence1 { get; set; }
@@ -52,7 +58,8 @@ public class PlayModel : PageModel
             PlayerId = $"human:{Match.HumanPlayerNames[0]}";
         }
 
-        GameState = await _api.GetInteractiveStateAsync(id);
+        GameState = await _api.GetInteractiveStateAsync(id, PlayerId);
+        MyPseudonym = GameState?.MyPseudonym;
         return Page();
     }
 

@@ -32,6 +32,11 @@ public class EmptyNeighborTemplate : ISentenceTemplate
         if (itemIndex < 4 && state.Doors[itemIndex + 1].Type == DoorType.Empty)
             emptyNeighborCount++;
 
+        if (emptyNeighborCount == 0)
+        {
+            return $"The {itemName} is not adjacent to any Empty door.";
+        }
+
         var doorWord = emptyNeighborCount == 1 ? "Empty door" : "Empty doors";
         var neighborWord = emptyNeighborCount == 1 ? "neighbor" : "neighbors";
 

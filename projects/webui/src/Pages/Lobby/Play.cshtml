@@ -28,6 +28,9 @@
     var totalRounds = Model.Match.TotalRounds;
     var pct = totalRounds > 0 ? (int)(100.0 * Model.Match.CompletedRounds / totalRounds) : 0;
     var myPlayerId = Model.PlayerId;
+    var myPseudonym = Model.MyPseudonym;
+    // Use GameState scores (anonymized with pseudonyms) when available, else fall back to Match scores
+    var displayScores = Model.GameState?.Scores ?? Model.Match.Scores;
 }
 
 <!-- Header -->
@@ -38,7 +41,11 @@
             <code>@Model.Match.Id.ToString()[..8]</code>
         </h1>
         <span class="badge @GetStatusBadgeClass(Model.Match.Status) fs-6">@Model.Match.Status</span>
-        @if (!string.IsNullOrEmpty(myPlayerId))
+        @if (!string.IsNullOrEmpty(myPseudonym))
+        {
+            <span class="badge bg-info fs-6 ms-2"><i class="bi bi-person-fill"></i> @myPseudonym (You)</span>
+        }
+        else if (!string.IsNullOrEmpty(myPlayerId))
         {
             <span class="badge bg-info fs-6 ms-2"><i class="bi bi-person-fill"></i> @myPlayerId</span>
         }
@@ -74,7 +81,7 @@
                 </div>
                 <div class="card-body">
                     @{
-                        var sortedScores = Model.Match.Scores.OrderByDescending(kv => kv.Value).ToList();
+                        var sortedScores = displayScores.OrderByDescending(kv => kv.Value).ToList();
                         var winner = sortedScores.FirstOrDefault();
                         var rank = 0;
                     }
@@ -97,15 +104,15 @@
                             @foreach (var kv in sortedScores)
                             {
                                 rank++;
-                                var isHuman = kv.Key == myPlayerId;
-                                <tr class="@(rank == 1 ? "table-warning" : "") @(isHuman ? "fw-bold" : "")">
+                                var isMe = kv.Key == myPseudonym;
+                                <tr class="@(rank == 1 ? "table-warning" : "") @(isMe ? "fw-bold" : "")">
                                     <td>
                                         @if (rank == 1) { <i class="bi bi-trophy-fill text-warning"></i> }
                                         @rank
                                     </td>
                                     <td>
                                         @kv.Key
-                                        @if (isHuman) { <span class="badge bg-info ms-1">You</span> }
+                                        @if (isMe) { <span class="badge bg-info ms-1">You</span> }
                                     </td>
                                     <td class="text-center">
                                         <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
@@ -304,8 +311,8 @@
                     </div>
                     @if (isOtherHumanTurn && currentPlayerId != null)
                     {
-                        <h4 class="text-muted">Waiting for @currentPlayerId...</h4>
-                        <p class="text-muted">Another human player is making their decision. This page will update automatically.</p>
+                        <h4 class="text-muted">Waiting for @(Model.GameState?.CurrentPlayerId ?? "another player")...</h4>
+                        <p class="text-muted">Another player is making their decision. This page will update automatically.</p>
                     }
                     else
                     {
@@ -358,11 +365,11 @@
                             @foreach (var choice in result.PlayerChoices)
                             {
                                 var scoreChange = result.ScoreChanges.GetValueOrDefault(choice.Key, 0);
-                                var isHuman = choice.Key == myPlayerId;
-                                <tr class="@(isHuman ? "fw-bold" : "")">
+                                var isMe = choice.Key == myPseudonym;
+                                <tr class="@(isMe ? "fw-bold" : "")">
                                     <td>
                                         @choice.Key
-                                        @if (isHuman) { <span class="badge bg-info ms-1">You</span> }
+                                        @if (isMe) { <span class="badge bg-info ms-1">You</span> }
                                     </td>
                                     <td class="text-center">@choice.Value</td>
                                     <td class="text-center">
@@ -392,13 +399,13 @@
                         </tr>
                     </thead>
                     <tbody>
-                        @foreach (var kv in Model.Match.Scores.OrderByDescending(kv => kv.Value))
+                        @foreach (var kv in displayScores.OrderByDescending(kv => kv.Value))
                         {
-                            var isHuman = kv.Key == myPlayerId;
-                            <tr class="@(isHuman ? "table-info" : "")">
+                            var isMe = kv.Key == myPseudonym;
+                            <tr class="@(isMe ? "table-info" : "")">
                                 <td>
                                     @kv.Key
-                                    @if (isHuman) { <span class="badge bg-info ms-1">You</span> }
+                                    @if (isMe) { <span class="badge bg-info ms-1">You</span> }
                                 </td>
                                 <td class="text-center">
                                     <span class="@(kv.Value > 0 ? "score-positive" : kv.Value < 0 ? "score-negative" : "score-neutral")">
@@ -419,7 +426,7 @@
                 <div class="card-body">
                     <ul class="list-unstyled mb-0">
                         <li><strong>Match ID:</strong> <code>@Model.Match.Id.ToString()[..8]</code></li>
-                        <li><strong>Models:</strong> @string.Join(", ", Model.Match.ModelIds)</li>
+                        <li><strong>Players:</strong> @Model.Match.ModelIds.Count</li>
                         <li><strong>Progress:</strong> @Model.Match.CompletedRounds / @totalRounds rounds</li>
                     </ul>
                 </div>

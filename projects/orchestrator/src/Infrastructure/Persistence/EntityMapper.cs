@@ -34,6 +34,7 @@ public static class EntityMapper
             ErrorMessage = match.ErrorMessage,
             IsInteractive = match.Config.IsInteractive,
             HumanPlayerNamesJson = JsonSerializer.Serialize(match.Config.HumanPlayerNames, JsonOptions),
+            PlayerPseudonymsJson = JsonSerializer.Serialize(match.Config.PlayerPseudonyms, JsonOptions),
             Rounds = match.Rounds.Select(ToEntity).ToList()
         };
     }
@@ -55,7 +56,8 @@ public static class EntityMapper
                 LlmTimeoutSeconds = entity.LlmTimeoutSeconds,
                 LlmTemperature = entity.LlmTemperature,
                 IsInteractive = entity.IsInteractive,
-                HumanPlayerNames = JsonSerializer.Deserialize<List<string>>(entity.HumanPlayerNamesJson, JsonOptions) ?? new()
+                HumanPlayerNames = JsonSerializer.Deserialize<List<string>>(entity.HumanPlayerNamesJson, JsonOptions) ?? new(),
+                PlayerPseudonyms = JsonSerializer.Deserialize<Dictionary<string, string>>(entity.PlayerPseudonymsJson, JsonOptions) ?? new()
             },
             Scores = JsonSerializer.Deserialize<Dictionary<string, int>>(entity.ScoresJson, JsonOptions) ?? new(),
             CreatedAt = entity.CreatedAt,

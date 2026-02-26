@@ -24,7 +24,7 @@ public interface IBenchmarkApiClient
     Task<GenerateSentencesResponse> GenerateSentencesAsync(GenerateSentencesRequest request);
     Task<TestPromptResponse> TestPromptAsync(TestPromptRequest request);
     Task<MatchResponse?> CreateInteractiveMatchAsync(CreateInteractiveMatchRequest request);
-    Task<InteractiveMatchStateResponse?> GetInteractiveStateAsync(Guid matchId);
+    Task<InteractiveMatchStateResponse?> GetInteractiveStateAsync(Guid matchId, string? playerId = null);
     Task<bool> SubmitHumanInputAsync(Guid matchId, string playerId, SubmitHumanInputRequest input);
 }
 
@@ -160,12 +160,14 @@ public class BenchmarkApiClient : IBenchmarkApiClient
         return null;
     }
 
-    public async Task<InteractiveMatchStateResponse?> GetInteractiveStateAsync(Guid matchId)
+    public async Task<InteractiveMatchStateResponse?> GetInteractiveStateAsync(Guid matchId, string? playerId = null)
     {
         try
         {
-            return await _http.GetFromJsonAsync<InteractiveMatchStateResponse>(
-                $"/api/matches/{matchId}/interactive-state", JsonOptions);
+            var url = $"/api/matches/{matchId}/interactive-state";
+            if (!string.IsNullOrEmpty(playerId))
+                url += $"?playerId={Uri.EscapeDataString(playerId)}";
+            return await _http.GetFromJsonAsync<InteractiveMatchStateResponse>(url, JsonOptions);
         }
         catch (HttpRequestException)
         {

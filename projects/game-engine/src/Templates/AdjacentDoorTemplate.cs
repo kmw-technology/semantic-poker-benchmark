@@ -4,7 +4,7 @@ using SemanticPoker.Shared.Models;
 namespace SemanticPoker.GameEngine.Templates;
 
 /// <summary>
-/// Generates: "The door immediately {left/right} of the {Treasure/Trap} is {Empty/not the Trap/not the Treasure}."
+/// Generates: "The door immediately {left/right} of the {Treasure/Trap} is {Empty/the Trap/the Treasure}."
 /// Checks the neighbor in the specified direction. Only applicable when the item is not at the boundary
 /// in that direction.
 /// </summary>
@@ -42,26 +42,13 @@ public class AdjacentDoorTemplate : ISentenceTemplate
         string description;
         if (neighbor.Type == DoorType.Empty)
         {
-            // We can say "is Empty" or "is not the {OtherItem}" -- both are true.
-            // Prefer the more informative "is Empty" sometimes, "is not the X" other times.
-            if (rng.Next(2) == 0)
-            {
-                description = "Empty";
-            }
-            else
-            {
-                description = $"not the {otherItemName}";
-            }
-        }
-        else if (neighbor.Type == chosenItem)
-        {
-            // This shouldn't happen (there's only one of each), but handle gracefully.
-            description = $"not the {otherItemName}";
+            description = "Empty";
         }
         else
         {
-            // Neighbor is the other special item. Say "not Empty" or identify truthfully.
-            description = $"not the {itemName}";
+            // Neighbor is the other special item — say what it IS (positive identification)
+            var neighborItemName = neighbor.Type == DoorType.Treasure ? "Treasure" : "Trap";
+            description = $"the {neighborItemName}";
         }
 
         return $"The door immediately {direction} of the {itemName} is {description}.";

@@ -22,6 +22,7 @@ public class MatchEntity
     public string? ErrorMessage { get; set; }
     public bool IsInteractive { get; set; }
     public string HumanPlayerNamesJson { get; set; } = "[]";
+    public string PlayerPseudonymsJson { get; set; } = "{}";
 
     public List<RoundEntity> Rounds { get; set; } = new();
 }

@@ -32,6 +32,9 @@ public class InteractiveMatchStateResponse
 
     // Last completed round result
     public RoundResultSummary? LastRoundResult { get; set; }
+
+    // Anonymization: the calling player's pseudonym (e.g. "Alpha")
+    public string? MyPseudonym { get; set; }
 }
 
 public class ShuffledSentenceDto

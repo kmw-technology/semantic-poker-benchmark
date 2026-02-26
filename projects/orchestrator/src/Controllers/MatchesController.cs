@@ -285,6 +285,14 @@ public class MatchesController : ControllerBase
             allModelIds.Add(count == 0 ? rawId : $"{rawId}#{count + 1}");
         }
 
+        // Generate persistent pseudonyms — shuffled so "Alpha" isn't always the first slot
+        var pseudonymNames = new[] { "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta" };
+        var rng = new Random();
+        var shuffledPseudonyms = pseudonymNames.Take(allModelIds.Count).OrderBy(_ => rng.Next()).ToList();
+        var playerPseudonyms = allModelIds
+            .Select((id, i) => (id, pseudonym: shuffledPseudonyms[i]))
+            .ToDictionary(x => x.id, x => x.pseudonym);
+
         var match = new Match
         {
             Id = Guid.NewGuid(),
@@ -300,7 +308,8 @@ public class MatchesController : ControllerBase
                 LlmTimeoutSeconds = request.LlmTimeoutSeconds ?? 120,
                 LlmTemperature = request.LlmTemperature ?? 0.7,
                 IsInteractive = true,
-                HumanPlayerNames = humanNames
+                HumanPlayerNames = humanNames,
+                PlayerPseudonyms = playerPseudonyms
             },
             CreatedAt = DateTime.UtcNow
         };
@@ -312,7 +321,7 @@ public class MatchesController : ControllerBase
     }
 
     [HttpGet("{id:guid}/interactive-state")]
-    public async Task<IActionResult> GetInteractiveState(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetInteractiveState(Guid id, [FromQuery] string? playerId, CancellationToken ct)
     {
         var match = await _repository.GetByIdAsync(id, ct);
         if (match == null)
@@ -388,6 +397,37 @@ public class MatchesController : ControllerBase
                     Source = s.Source.ToString()
                 }).ToList() ?? new()
             };
+        }
+
+        // Apply pseudonym anonymization ONLY for player views (when playerId is provided).
+        // Spectators call without playerId and get real model names.
+        if (!string.IsNullOrEmpty(playerId) && match.Config.IsInteractive && match.Config.PlayerPseudonyms.Count > 0)
+        {
+            var map = match.Config.PlayerPseudonyms;
+            string Anon(string id) => map.GetValueOrDefault(id, id);
+
+            // Set the human player's own pseudonym
+            response.MyPseudonym = Anon(playerId);
+
+            // Anonymize scores
+            response.Scores = response.Scores
+                .ToDictionary(kv => Anon(kv.Key), kv => kv.Value);
+
+            // Anonymize current player/architect IDs
+            if (response.CurrentPlayerId != null)
+                response.CurrentPlayerId = Anon(response.CurrentPlayerId);
+            if (response.CurrentArchitectId != null)
+                response.CurrentArchitectId = Anon(response.CurrentArchitectId);
+
+            // Anonymize last round result
+            if (response.LastRoundResult != null)
+            {
+                response.LastRoundResult.ArchitectModelId = Anon(response.LastRoundResult.ArchitectModelId);
+                response.LastRoundResult.PlayerChoices = response.LastRoundResult.PlayerChoices
+                    .ToDictionary(kv => Anon(kv.Key), kv => kv.Value);
+                response.LastRoundResult.ScoreChanges = response.LastRoundResult.ScoreChanges
+                    .ToDictionary(kv => Anon(kv.Key), kv => kv.Value);
+            }
         }
 
         return Ok(response);

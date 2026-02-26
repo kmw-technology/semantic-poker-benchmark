@@ -41,7 +41,7 @@ public class AdjacentDoorTemplateTests
         var rng = new Random(42);
         var text = _template.Generate(state, rng);
 
-        Assert.Matches(@"^The door immediately (left|right) of the (Treasure|Trap) is .+\.$", text);
+        Assert.Matches(@"^The door immediately (left|right) of the (Treasure|Trap) is (Empty|the Treasure|the Trap)\.$", text);
     }
 
     [Fact]
@@ -125,15 +125,13 @@ public class AdjacentDoorTemplateTests
             // When the neighbor is the other special item, description should be "not the {same item}"
             if (text.Contains("of the Treasure") && text.Contains("immediately right"))
             {
-                // Right of Treasure(B) is Trap(C)
-                // Should say "not the Treasure" (since neighbor is Trap, which is "not the Treasure")
-                Assert.Contains("not the Treasure", text);
+                // Right of Treasure(B) is Trap(C) — positive identification
+                Assert.Contains("is the Trap", text);
             }
             else if (text.Contains("of the Trap") && text.Contains("immediately left"))
             {
-                // Left of Trap(C) is Treasure(B)
-                // Should say "not the Trap" (since neighbor is Treasure, which is "not the Trap")
-                Assert.Contains("not the Trap", text);
+                // Left of Trap(C) is Treasure(B) — positive identification
+                Assert.Contains("is the Treasure", text);
             }
         }
     }

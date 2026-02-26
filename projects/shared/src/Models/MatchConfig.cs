@@ -12,4 +12,5 @@ public class MatchConfig
     public double LlmTemperature { get; set; } = 0.7;
     public bool IsInteractive { get; set; } = false;
     public List<string> HumanPlayerNames { get; set; } = new();
+    public Dictionary<string, string> PlayerPseudonyms { get; set; } = new();
 }
