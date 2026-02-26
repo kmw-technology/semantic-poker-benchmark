@@ -201,6 +201,9 @@ public class MatchesController : ControllerBase
         match.CompletedAt = DateTime.UtcNow;
         await _repository.UpdateAsync(match, ct);
 
+        // Unblock the game loop if waiting for human input
+        _humanInput.CancelMatch(id);
+
         _logger.LogInformation("Match {MatchId} cancelled", id);
         return Ok(MapToResponse(match));
     }

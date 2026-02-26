@@ -27,13 +27,15 @@
                     else
                     {
                         <p class="text-muted small">Select at least 2 LLM opponents to play against.</p>
+                        var modelIndex = 0;
                         @foreach (var m in Model.AvailableModels)
                         {
+                            var safeId = $"model-{modelIndex++}";
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" name="SelectedModels"
-                                       value="@m.ModelId" id="model-@m.ModelId"
+                                       value="@m.ModelId" id="@safeId"
                                        @(Model.SelectedModels.Contains(m.ModelId) ? "checked" : "")>
-                                <label class="form-check-label" for="model-@m.ModelId">
+                                <label class="form-check-label" for="@safeId">
                                     <strong>@m.DisplayName</strong>
                                     @if (m.ParameterCount.HasValue)
                                     {

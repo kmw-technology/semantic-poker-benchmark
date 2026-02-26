@@ -64,7 +64,11 @@ public class PlayModel : PageModel
         };
 
         var success = await _api.SubmitHumanInputAsync(id, request);
-        if (!success) ErrorMessage = "Failed to submit input. Please try again.";
+        if (!success)
+        {
+            ErrorMessage = "Failed to submit input. Please try again.";
+            return await OnGetAsync(id);
+        }
 
         return RedirectToPage(new { id });
     }
@@ -85,7 +89,11 @@ public class PlayModel : PageModel
         };
 
         var success = await _api.SubmitHumanInputAsync(id, request);
-        if (!success) ErrorMessage = "Failed to submit input. Please try again.";
+        if (!success)
+        {
+            ErrorMessage = "Failed to submit input. Please try again.";
+            return await OnGetAsync(id);
+        }
 
         return RedirectToPage(new { id });
     }

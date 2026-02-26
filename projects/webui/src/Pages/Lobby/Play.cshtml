@@ -23,6 +23,8 @@
     var currentRound = Model.GameState?.CurrentRound ?? Model.Match.CompletedRounds;
     var totalRounds = Model.Match.TotalRounds;
     var pct = totalRounds > 0 ? (int)(100.0 * Model.Match.CompletedRounds / totalRounds) : 0;
+    // Scores/choices use "human:Name" as key, not just "Name"
+    var humanModelId = Model.Match.HumanPlayerName != null ? $"human:{Model.Match.HumanPlayerName}" : null;
 }
 
 <!-- Header -->
@@ -92,7 +94,7 @@
                             @foreach (var kv in sortedScores)
                             {
                                 rank++;
-                                var isHuman = kv.Key == Model.Match.HumanPlayerName;
+                                var isHuman = kv.Key == humanModelId;
                                 <tr class="@(rank == 1 ? "table-warning" : "") @(isHuman ? "fw-bold" : "")">
                                     <td>
                                         @if (rank == 1) { <i class="bi bi-trophy-fill text-warning"></i> }
@@ -343,7 +345,7 @@
                             @foreach (var choice in result.PlayerChoices)
                             {
                                 var scoreChange = result.ScoreChanges.GetValueOrDefault(choice.Key, 0);
-                                var isHuman = choice.Key == Model.Match.HumanPlayerName;
+                                var isHuman = choice.Key == humanModelId;
                                 <tr class="@(isHuman ? "fw-bold" : "")">
                                     <td>
                                         @choice.Key
@@ -379,7 +381,7 @@
                     <tbody>
                         @foreach (var kv in Model.Match.Scores.OrderByDescending(kv => kv.Value))
                         {
-                            var isHuman = kv.Key == Model.Match.HumanPlayerName;
+                            var isHuman = kv.Key == humanModelId;
                             <tr class="@(isHuman ? "table-info" : "")">
                                 <td>
                                     @kv.Key
@@ -418,6 +420,7 @@
     <script>
         const matchId = '@Model.MatchId';
         const matchStatus = '@Model.Match.Status';
+        const isHumanTurn = @(Model.GameState?.IsHumanTurn == true ? "true" : "false");
         const apiBaseUrl = '@(ViewContext.HttpContext.RequestServices.GetRequiredService<IConfiguration>()["BenchmarkApi:BaseUrl"] ?? "http://localhost:5000")';
 
         if (matchStatus !== 'Completed' && matchStatus !== 'Cancelled' && matchStatus !== 'Failed') {
@@ -428,7 +431,10 @@
 
             connection.on('WaitingForHumanInput', function(data) {
                 console.log('Waiting for human input:', data);
-                window.location.reload();
+                // Only reload if it's NOT already the human's turn (avoid infinite reload loop)
+                if (!isHumanTurn) {
+                    window.location.reload();
+                }
             });
 
             connection.on('RoundCompleted', function(data) {
@@ -453,11 +459,13 @@
                     console.warn('SignalR failed, falling back to polling:', err);
                 });
 
-            // Fallback: poll every 8 seconds when page is visible
-            setInterval(function() {
-                if (document.hidden) return;
-                window.location.reload();
-            }, 8000);
+            // Fallback: poll every 8 seconds, but NOT when human is actively typing
+            if (!isHumanTurn) {
+                setInterval(function() {
+                    if (document.hidden) return;
+                    window.location.reload();
+                }, 8000);
+            }
         }
     </script>
 }

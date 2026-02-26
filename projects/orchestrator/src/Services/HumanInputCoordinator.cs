@@ -27,8 +27,9 @@ public class HumanInputCoordinator
         }
         finally
         {
-            _pendingInputs.TryRemove(matchId, out _);
-            _waitingContext.TryRemove(matchId, out _);
+            // Only remove if still ours (avoid clearing a newer request from the next round)
+            _pendingInputs.TryRemove(new KeyValuePair<Guid, TaskCompletionSource<HumanInput>>(matchId, tcs));
+            _waitingContext.TryRemove(new KeyValuePair<Guid, HumanInputRequest>(matchId, request));
         }
     }
 
